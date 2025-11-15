@@ -1,5 +1,6 @@
 import asyncio
 import os
+import warnings
 from dotenv import load_dotenv
 from claude_agent_sdk import (
     ClaudeAgentOptions, 
@@ -11,6 +12,10 @@ from claude_agent_sdk import (
 )
 from pathlib import Path
 from agents.ocr import extract_text
+
+# Suppress ResourceWarnings from anyio streams in claude-agent-sdk
+# These are internal to the SDK and are cleaned up during garbage collection
+warnings.filterwarnings("ignore", category=ResourceWarning, module="anyio")
 
 # Load environment variables from .env file
 load_dotenv()
@@ -30,45 +35,80 @@ class ReimbursementManager:
         self.options.frequency_penalty = 0
         
         # Set system prompt for the reimbursement manager role
-        system_prompt = open("prompts/user_interactions.txt", "r").read()
+        prompt_path = Path("prompts/user_interactions.txt")
+        with prompt_path.open("r", encoding="utf-8") as f:
+            system_prompt = f.read()
 
-        self.options.system = system_prompt
+        self.options.system_prompt = system_prompt
         self.agent = ClaudeSDKClient(self.options)
+
+    def extract_recipt_data(self, downloaded_file_names: list):
+        # Acknowledge the upload
+        valid = False
+        if len(downloaded_file_names) > 0:
+            for file_name in downloaded_file_names:
+                obj = extract_text(Path("downloads") / file_name)
+                if obj["is_receipt"]:
+                    if obj["too_blurry"]:
+                        return valid, "The receipt is too blurry to read. Please send a clearer image."
+                    else:
+                        valid = True
+                        return valid, f"Receipt detected! Here's the information: {obj}"
+                else:
+                    return valid, "This is not a receipt."
+        else:
+            return valid, "Thanks for sending the file! I encountered an error downloading it. 📁"
         
     async def process_user_message(self, message_content: str, downloaded_file_names: list):
         """
         Process a user message, detect images, and handle the reimbursement workflow.
         """
-
-        receipt_detected = False
-        blurry = False
-
-        # Acknowledge the upload
-        if downloaded_file_names:
-            files_list = ", ".join(downloaded_file_names)
-
-            # Acknowledge the upload
-            if len(downloaded_file_names) > 0:
-                for file_name in downloaded_file_names:
-                    obj = extract_text(Path("downloads") / file_name)
-                    if obj["is_receipt"]:
-                        if obj["too_blurry"]:
-                            receipt_detected = True
-                            blurry = True
-                            return {"location": "dm", "content": "The receipt is too blurry to read. Please send a clearer image."}
-                        else:
-                            receipt_detected = True
-                            blurry = True
-                            return {"location": "dm", "content": f"Receipt detected! Here's the information: {obj}"}
-                    else:
-                        receipt_detected = True
-                        blurry = True
-                        return {"location": "dm", "content": "This is not a receipt."}
-            else:
-                return {"location": "dm", "content": "Thanks for sending the file! I encountered an error downloading it. 📁"}
-        else:
-            return {"location": "dm", "content": "No files uploaded. Please upload a receipt image."}
+        res = None
         
+        try:
+            async with self.agent:
+                await self.agent.query("Do you still need a receipt image? Respond with 'yes' or 'no'.")
+                
+                # Collect all messages first to ensure stream is fully consumed
+                messages = []
+                try:
+                    async for message in self.agent.receive_response():
+                        messages.append(message)
+                except StopAsyncIteration:
+                    # Iterator exhausted, this is expected
+                    pass
+                except Exception as e:
+                    print(f"Error receiving response: {e}")
+                
+                # Process collected messages
+                for message in messages:
+                    if isinstance(message, AssistantMessage):
+                        for block in message.content:
+                            if isinstance(block, TextBlock):
+                                res = block.text
+                                # Only need the first text block
+                                break
+                        if res:
+                            break
+        finally:
+            # Give a small delay to ensure cleanup completes
+            await asyncio.sleep(0.05)
+
+        # Default to "no" if no response was received
+        if res is None:
+            res = "no"
+        
+        if res.lower().strip() == "yes":
+            if downloaded_file_names:
+                valid, message = self.extract_recipt_data(downloaded_file_names)
+                if valid:
+                    return {"location": "dm", "content": message}
+                else:
+                    return {"location": "dm", "content": message}
+            else:
+                return {"location": "dm", "content": "No files uploaded. Please upload a receipt image."}
+        else:
+            return {"location": "dm", "content": "No more receipt images needed at this time."}
         #await self.agent.query(receipt_summary)
     
     async def chat(self):
