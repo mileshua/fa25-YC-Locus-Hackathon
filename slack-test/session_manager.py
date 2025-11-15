@@ -2,6 +2,7 @@ import sys
 from pathlib import Path
 import time
 from typing import Dict, Optional
+from agents.main_agent import ReimbursementManager
 
 
 class SessionManager:
@@ -39,13 +40,13 @@ class SessionManager:
         created_at = start_time if start_time is not None else time.perf_counter()
         
         # Create a new ReimbursementManager instance for this session
-        manager = None
+        manager = ReimbursementManager()
         
         # Store the session
         self.sessions[session_id] = {
             "id": session_id,
             "created_at": created_at,
-            "manager": manager
+            "manager" : manager
         }
         
         return {
@@ -87,6 +88,9 @@ class SessionManager:
         return {id : {"start_time": self.sessions[id]["created_at"]} for id in self.sessions.keys()}
     
     async def new_dm_message(self, user_id: str, message_content: str, downloaded_file_names) -> dict:
+        manager = self.sessions[user_id]["manager"]
+        print("manger: ", manager)
+        return await manager.process_user_message(message_content, downloaded_file_names)
         return {"location": "dm", "content": "test :)"}
         """
         Send a message to a reimbursement manager in a specific session.

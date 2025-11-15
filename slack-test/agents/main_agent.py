@@ -10,7 +10,7 @@ from claude_agent_sdk import (
     UserMessage
 )
 from pathlib import Path
-from ocr import extract_text
+from agents.ocr import extract_text
 
 # Load environment variables from .env file
 load_dotenv()
@@ -66,6 +66,8 @@ class ReimbursementManager:
                         return {"location": "dm", "content": "This is not a receipt."}
             else:
                 return {"location": "dm", "content": "Thanks for sending the file! I encountered an error downloading it. 📁"}
+        else:
+            return {"location": "dm", "content": "No files uploaded. Please upload a receipt image."}
         
         #await self.agent.query(receipt_summary)
     

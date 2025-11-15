@@ -9,7 +9,7 @@ load_dotenv()
 
 client = anthropic.Anthropic()
 
-f = open("../prompts/ocr.txt", "r")
+f = open("prompts/ocr.txt", "r")
 prompt = f.read()
 f.close()
 

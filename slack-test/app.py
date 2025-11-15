@@ -9,7 +9,6 @@ from slack_bolt.adapter.socket_mode import SocketModeHandler
 from slack_bolt.adapter.socket_mode.async_handler import AsyncSocketModeHandler
 import time
 import math
-from ocr import extract_text
 from session_manager import SessionManager
 
 client = SessionManager()
@@ -123,7 +122,10 @@ async def handle_dms(event, say, logger, client):
         downloaded_file_names = download_files(user_id, files, client, logger)
 
     message_text = event.get("text", "")
+    print("test1")
     response = await handle_session_content(user_id, message_text, downloaded_file_names, logger)
+    print("test2")
+    print(response)
     if response and response.get("location") == "dm":
         await say(response.get("content"))
 
