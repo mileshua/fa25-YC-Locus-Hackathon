@@ -1,9 +1,12 @@
 import os
 import requests
 import logging
+import asyncio
 from pathlib import Path
 from slack_bolt import App
+from slack_bolt.async_app import AsyncApp
 from slack_bolt.adapter.socket_mode import SocketModeHandler
+from slack_bolt.adapter.socket_mode.async_handler import AsyncSocketModeHandler
 import time
 import math
 from ocr import extract_text
@@ -23,14 +26,14 @@ logging.basicConfig(
 # see: https://slack.dev/bolt-python/tutorial/getting-started 
 
 # Initializes your app with your bot token
-app = App(token=os.environ.get("SLACK_BOT_TOKEN"))
+app = AsyncApp(token=os.environ.get("SLACK_BOT_TOKEN"))
 app.sessions = {}
 
 # Respond to ping messages
 @app.message("ping")
-def handle_ping_message(message, say):
+async def handle_ping_message(message, say):
     """Respond to 'ping' messages"""
-    say("Pong")
+    await say("Pong")
 
 
 def download_files(user_id, files, client, logger):
@@ -86,7 +89,7 @@ def download_files(user_id, files, client, logger):
     return downloaded_files
 
 
-def handle_session_content(user_id, message_content, downloaded_file_names, logger):
+async def handle_session_content(user_id, message_content, downloaded_file_names, logger):
     sessions = client.get_sessions()
     print("sessions: " + str(sessions))
     session = sessions.get(user_id)
@@ -99,12 +102,12 @@ def handle_session_content(user_id, message_content, downloaded_file_names, logg
         print("session found")
         print("session: " + str(session))
 
-    return client.new_dm_message(user_id, message_content, downloaded_file_names)
+    return await client.new_dm_message(user_id, message_content, downloaded_file_names)
     
 
 
 @app.event("message")
-def handle_dms(event, say, logger, client):
+async def handle_dms(event, say, logger, client):
     subtype = event.get("subtype")
     channel_type = event.get("channel_type")
 
@@ -127,12 +130,15 @@ def handle_dms(event, say, logger, client):
         downloaded_file_names = download_files(user_id, files, client, logger)
 
     
-    response = handle_session_content(user_id, message_text, downloaded_file_names, logger)
-
+    response = await handle_session_content(user_id, message_text, downloaded_file_names, logger)
     if response and response.get("location") == "dm":
-        say(response.get("content"))
+        await say(response.get("content"))
 
 
 # Start your app
+async def main():
+    handler = AsyncSocketModeHandler(app, os.environ["SLACK_APP_TOKEN"])
+    await handler.start_async()
+
 if __name__ == "__main__":
-    SocketModeHandler(app, os.environ["SLACK_APP_TOKEN"]).start()
+    asyncio.run(main())
