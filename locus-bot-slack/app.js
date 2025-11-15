@@ -3,17 +3,10 @@ const { App } = require("@slack/bolt");
 const { query } = require("@anthropic-ai/claude-agent-sdk");
 const fs = require("fs");
 const path = require("path");
-const { 
+/*const { 
   initializeTools, 
-  getWalletId, 
-  getManagerId, 
-  getBudgetInfo, 
-  sendDM,
-  getWalletIdImpl,
-  getManagerIdImpl,
-  getBudgetInfoImpl,
-  sendDMImpl
-} = require("./tools");
+  customMCP
+} = require("./tools");*/
 
 /**
  * Initializes Slack Bolt app with SocketMode
@@ -25,7 +18,17 @@ const app = new App({
 });
 
 // Initialize tools with app instance for DM functionality
-initializeTools(app);
+/*initializeTools(app);*/
+
+async function* generateMessages(prompt) {
+  yield {
+    type: "user",
+    message: {
+      role: "user",
+      content: prompt
+    }
+  };
+}
 
 /**
  * Process OCR text with Claude and execute Locus payment
@@ -54,59 +57,24 @@ async function processOcrAndPay(ocrText, say, thread_ts) {
           Authorization: `Bearer ${process.env.LOCUS_API_KEY}`,
         },
       },
+      /*custom_tools: customMCP*/
     };
 
     const options = {
       mcpServers,
-      // Define custom tools that Claude can use
-      tools: [getWalletId, getManagerId, getBudgetInfo, sendDM],
       // Use both allowedTools and disallowedTools for reliable blocking (workaround for SDK bugs)
       allowedTools: [
         "mcp__locus__*", // Allow all Locus tools
         "mcp__list_resources",
         "mcp__read_resource",
-        "getWalletId",
-        "getManagerId", 
-        "getBudgetInfo",
-        "sendDM",
+        //"mcp__custom_tools__*"
       ],
       permissionMode: "default", // Use default permission mode for controlled execution
       apiKey: process.env.ANTHROPIC_API_KEY,
-      // Tool execution handler - this is where we actually execute our custom tools
-      onToolUse: async (toolName, input) => {
-        console.log(`🔧 Executing tool: ${toolName}`);
-        console.log(`   Input:`, JSON.stringify(input, null, 2));
-        
-        try {
-          let result;
-          
-          switch (toolName) {
-            case "getWalletId":
-              result = await getWalletIdImpl(input);
-              break;
-            case "getManagerId":
-              result = await getManagerIdImpl(input);
-              break;
-            case "getBudgetInfo":
-              result = await getBudgetInfoImpl(input);
-              break;
-            case "sendDM":
-              result = await sendDMImpl(input);
-              break;
-            default:
-              throw new Error(`Unknown tool: ${toolName}`);
-          }
-          
-          console.log(`   Result: ${typeof result === 'object' ? JSON.stringify(result) : result}`);
-          return result;
-        } catch (error) {
-          console.error(`❌ Error executing ${toolName}:`, error.message);
-          throw error;
-        }
-      },
       // Enhanced canUseTool for permission checking only
       canUseTool: async (toolName, input) => {
-        console.log(`🔧 Tool permission check: ${toolName}`);
+        console.log(`🔧 Tool: ${toolName}`);
+        console.log(`📥 Input: ${JSON.stringify(input, null, 2)}`);
         
         // Allow Locus MCP tools
         if (toolName.startsWith("mcp__locus__")) {
@@ -118,13 +86,13 @@ async function processOcrAndPay(ocrText, say, thread_ts) {
         }
         
         // Allow custom tools (execution handled by onToolUse)
-        if (["getWalletId", "getManagerId", "getBudgetInfo", "sendDM"].includes(toolName)) {
+        /*if (toolName.startsWith("mcp__custom_tools__")) {
           console.log(`✅ Allowing custom tool: ${toolName}`);
           return {
             behavior: "allow",
             updatedInput: input,
           };
-        }
+        }*/
         
         // Deny all other tools
         console.log(`🚫 Denying unknown tool: ${toolName}`);
@@ -135,10 +103,6 @@ async function processOcrAndPay(ocrText, say, thread_ts) {
       },
     };
 
-    // Load prompt template from file and substitute OCR text
-    const promptTemplate = fs.readFileSync(path.join(__dirname, "prompt", "main.txt"), "utf8");
-    const prompt = promptTemplate.replace("${ocrText}", ocrText);
-
     console.log("🎯 Sending to Claude with Locus tools access...\n");
     console.log("─".repeat(50));
 
@@ -146,8 +110,15 @@ async function processOcrAndPay(ocrText, say, thread_ts) {
     let finalResult = null;
     let toolCalls = [];
 
+    // Load prompt template from file and substitute OCR text
+    const promptTemplate = fs.readFileSync(path.join(__dirname, "prompt", "main.txt"), "utf8");
+    const walletData = fs.readFileSync(path.join(__dirname, "wallet.json"), "utf8");
+    const budgetData = fs.readFileSync(path.join(__dirname, "budget.json"), "utf8");
+    const hierarchyData = fs.readFileSync(path.join(__dirname, "hierarchy.json"), "utf8");
+    const prompt = promptTemplate.replace("${ocrText}", ocrText).replace("${walletData}", walletData).replace("${budgetData}", budgetData).replace("${hierarchyData}", hierarchyData);
+
     for await (const message of query({
-      prompt,
+      prompt: generateMessages(prompt),
       options,
     })) {
       if (message.type === "system" && message.subtype === "init") {
