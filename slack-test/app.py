@@ -3,6 +3,7 @@ import requests
 from pathlib import Path
 from slack_bolt import App
 from slack_bolt.adapter.socket_mode import SocketModeHandler
+from ocr import extract_text
 
 # This sample slack application uses SocketMode
 # For the companion getting started setup guide, 
@@ -65,9 +66,13 @@ def handle_file_uploads(event, say, logger, client):
                     logger.error(f"Error downloading file {file_id}: {str(e)}")
 
             # Acknowledge the upload
-            if downloaded_files:
-                files_list = ", ".join(downloaded_files)
-                say(f"Thanks for sending the file(s)! I've downloaded: {files_list} 📁")
+            if len(downloaded_files) > 0:
+                for file_name in downloaded_files:
+                    obj = extract_text(downloads_dir / file_name)
+                    if obj["is_receipt"]:
+                        say(f"Receipt detected! Here's the information: {obj}")
+                    else:
+                        say("This is not a receipt.")
             else:
                 say("Thanks for sending the file! I encountered an error downloading it. 📁")
 
