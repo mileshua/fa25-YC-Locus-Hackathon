@@ -154,34 +154,7 @@ You are authorized to process payments automatically. Do not ask for confirmatio
 }
 
 /**
- * Listen for messages containing "INVOICE" or "RECEIPT" keywords
- * Process them automatically for payment
- */
-app.message(/INVOICE|RECEIPT/i, async ({ message, say }) => {
-  try {
-    console.log("\n" + "=".repeat(60));
-    console.log("📨 New payment request detected!");
-    console.log("=".repeat(60) + "\n");
-
-    // Create a thread to keep conversation organized
-    await say({
-      text: "📋 Payment request received! Processing...",
-      thread_ts: message.ts,
-    });
-
-    // Process the OCR text and make payment
-    await processOcrAndPay(message.text, say, message.ts);
-  } catch (error) {
-    console.error("Error handling message:", error);
-    await say({
-      text: `❌ Failed to process payment request: ${error.message}`,
-      thread_ts: message.ts,
-    });
-  }
-});
-
-/**
- * Optional: Listen for explicit "PAYMENT REQUEST" keyword
+ * Listen for "PAYMENT REQUEST" keyword
  */
 app.message("PAYMENT REQUEST", async ({ message, say }) => {
   try {
