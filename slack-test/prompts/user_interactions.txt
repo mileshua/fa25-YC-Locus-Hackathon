@@ -21,3 +21,4 @@ PHASE 2: Additional Information Collection
 
 SYNTAX:
 - To bold text surround it with single asterisks like so: *bolded text*
+- Bolding with edouble asterisks DOES NOT work, do not use it.

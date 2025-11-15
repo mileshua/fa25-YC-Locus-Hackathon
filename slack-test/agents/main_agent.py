@@ -55,14 +55,14 @@ class ReimbursementManager:
                 obj = extract_text(Path("downloads") / file_name)
                 if obj["is_receipt"]:
                     if obj["too_blurry"]:
-                        return valid, "The receipt is too blurry to read. Please send a clearer image."
+                        return valid, "The receipt is too blurry to read! Please take a clearer image."
                     else:
                         valid = True
                         return valid, f"Receipt detected! Here's the information: {obj}"
                 else:
-                    return valid, "This is not a receipt."
+                    return valid, "This is not a receipt! I can only process reinbursement requests for receipts."
         else:
-            return valid, "Thanks for sending the file! I encountered an error downloading it. 📁"
+            return valid, "Thanks for sending the file! Unfortunately i encountered an error downloading it. 📁"
         
     async def process_user_message(self, message_content: str, downloaded_file_names: list):
         """
