@@ -90,46 +90,5 @@ class SessionManager:
     async def new_dm_message(self, user_id: str, message_content: str, downloaded_file_names) -> dict:
         manager = self.sessions[user_id]["manager"]
         print("manger: ", manager)
-        return await manager.process_user_message(message_content, downloaded_file_names)
-        return {"location": "dm", "content": "test :)"}
-        """
-        Send a message to a reimbursement manager in a specific session.
-        
-        Args:
-            user_id: The user/session ID
-            message: The message to send to the agent
-        
-        Returns:
-            dict with response text from the agent
-        
-        Raises:
-            ValueError: If the session is not found
-        """
-        session_id = user_id
-        
-        if session_id not in self.sessions:
-            raise ValueError(f"Session with ID '{session_id}' not found")
-        
-        session = self.sessions[session_id]
-        manager = session["manager"]
-        
-        """
-            # Process the message using the reimbursement manager
-            async with manager.agent:
-                await manager.process_message(user_input=message)
-                
-                # Collect the response
-                response_parts = []
-                async for msg in manager.agent.receive_response():
-                    if isinstance(msg, AssistantMessage):
-                        for block in msg.content:
-                            if isinstance(block, TextBlock):
-                                response_parts.append(block.text)
-                    elif isinstance(msg, ResultMessage):
-                        # Handle result messages if needed
-                        pass
-            
-            response_text = "".join(response_parts) if response_parts else "No response received"
-            """
-        response_text = "No response received"
-        return {"response": response_text}
+        all_info_gathered, response = await manager.process_user_message(message_content, downloaded_file_names)
+        return response
