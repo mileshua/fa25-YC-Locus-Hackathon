@@ -108,28 +108,21 @@ async def handle_session_content(user_id, message_content, downloaded_file_names
 
 @app.event("message")
 async def handle_dms(event, say, logger, client):
-    subtype = event.get("subtype")
     channel_type = event.get("channel_type")
-
     if channel_type != "im":
         return
     
     # Only handle file_share subtype (file uploads)
     downloaded_file_names = []
-    message_text = event.get("text", "")
     user_id = event.get("user")
+
+    subtype = event.get("subtype")
     if subtype == "file_share":
-
-        # Only acknowledge files that are sent via DM (im)
-        user = event.get("user")
         files = event.get("files", [])
-
-        logger.info(f"Received DM file upload from {user}: {files}")
-
-        # Download files
+        logger.info(f"Received DM file upload from {user_id}: {files}")
         downloaded_file_names = download_files(user_id, files, client, logger)
 
-    
+    message_text = event.get("text", "")
     response = await handle_session_content(user_id, message_text, downloaded_file_names, logger)
     if response and response.get("location") == "dm":
         await say(response.get("content"))
