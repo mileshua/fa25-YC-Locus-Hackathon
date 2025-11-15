@@ -146,14 +146,15 @@ async def handle_dms(event, say, logger, client):
         print("downloaded_file_names: " + str(downloaded_file_names))
 
     message_text = event.get("text", "")
-    response = await handle_session_content(user_id, message_text, downloaded_file_names, logger)
-    if response and response.get("location") == "dm":
-        await say(response.get("content"))
-    elif response and response.get("location") == "request":
-        await client.chat_postMessage(
-            channel="C09T45YDXAA",
-            text=response.get("content"),
-        )
+    responses = await handle_session_content(user_id, message_text, downloaded_file_names, logger)
+    for response in responses:
+        if response and response.get("location") == "dm":
+            await say(response.get("content"))
+        elif response and response.get("location") == "request":
+            await client.chat_postMessage(
+                channel="C09T45YDXAA",
+                text=response.get("content"),
+            )
     
     # Clear thinking status after processing is complete
     try:
