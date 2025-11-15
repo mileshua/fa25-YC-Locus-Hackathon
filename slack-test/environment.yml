@@ -1,0 +1,13 @@
+name: agent-to-agent-test
+channels:
+  - defaults
+  - conda-forge
+dependencies:
+  - python>=3.8
+  - pip
+  - pip:
+    - claude-agent-sdk
+    - python-dotenv
+    - fastapi
+    - uvicorn
+

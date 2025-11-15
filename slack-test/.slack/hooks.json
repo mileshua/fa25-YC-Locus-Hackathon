@@ -1,5 +1,6 @@
 {
   "hooks": {
-    "get-hooks": "python3 -m slack_cli_hooks.hooks.get_hooks"
+    "get-hooks": "/Users/alekseyvalouev/opt/anaconda3/envs/agent-to-agent-test/bin/python -m slack_cli_hooks.hooks.get_hooks",
+    "start": "/Users/alekseyvalouev/opt/anaconda3/envs/agent-to-agent-test/bin/python app.py"
   }
 }
