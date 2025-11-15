@@ -1,9 +1,12 @@
 import os
 import requests
 import logging
+import asyncio
 from pathlib import Path
 from slack_bolt import App
+from slack_bolt.async_app import AsyncApp
 from slack_bolt.adapter.socket_mode import SocketModeHandler
+from slack_bolt.adapter.socket_mode.async_handler import AsyncSocketModeHandler
 import time
 import math
 from ocr import extract_text
@@ -23,14 +26,14 @@ logging.basicConfig(
 # see: https://slack.dev/bolt-python/tutorial/getting-started 
 
 # Initializes your app with your bot token
-app = App(token=os.environ.get("SLACK_BOT_TOKEN"))
+app = AsyncApp(token=os.environ.get("SLACK_BOT_TOKEN"))
 app.sessions = {}
 
 # Respond to ping messages
 @app.message("ping")
 async def handle_ping_message(message, say):
     """Respond to 'ping' messages"""
-    say("Pong")
+    await say("Pong")
 
 
 def download_files(user_id, files, client, logger):
@@ -136,22 +139,26 @@ async def handle_dms(event, say, logger, client):
                     obj = extract_text(Path("downloads") / file_name)
                     if obj["is_receipt"]:
                         if obj["too_blurry"]:
-                            say("The receipt is too blurry to read. Please send a clearer image.")
+                            await say("The receipt is too blurry to read. Please send a clearer image.")
                         else:
-                            say(f"Receipt detected! Here's the information: {obj}")
+                            await say(f"Receipt detected! Here's the information: {obj}")
                     else:
-                        say("This is not a receipt.")
+                        await say("This is not a receipt.")
             else:
-                say("Thanks for sending the file! I encountered an error downloading it. 📁")
+                await say("Thanks for sending the file! I encountered an error downloading it. 📁")
                 logger.info(f"Sent notification to #reinbursements channel for files: {files_list}")
         else:
-            say("Thanks for sending the file! I encountered an error downloading it. 📁")
+            await say("Thanks for sending the file! I encountered an error downloading it. 📁")
     
     response = await handle_session_content(user_id, message_text, downloaded_file_names, logger)
     if response and response.get("location") == "dm":
-        say(response.get("content"))
+        await say(response.get("content"))
 
 
 # Start your app
+async def main():
+    handler = AsyncSocketModeHandler(app, os.environ["SLACK_APP_TOKEN"])
+    await handler.start_async()
+
 if __name__ == "__main__":
-    SocketModeHandler(app, os.environ["SLACK_APP_TOKEN"]).start()
+    asyncio.run(main())
