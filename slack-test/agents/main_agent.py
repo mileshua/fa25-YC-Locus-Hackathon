@@ -88,14 +88,14 @@ class ReimbursementManager:
                                     if isinstance(block, TextBlock):
                                         self.more_info = block.text
                                         self.conversation_history += ("\n" + self.more_info)
-                                        return {"location": "dm", "content": self.more_info}
+                                        return False, {"location": "dm", "content": self.more_info}
                 else:
-                    return {"location": "dm", "content": message}
+                    return False, {"location": "dm", "content": message}
             else:
-                return {"location": "dm", "content": "No files uploaded. Please upload a receipt image."}
+                return False, {"location": "dm", "content": "No files uploaded. Please upload a receipt image."}
         else:
             if self.all_info_collected:
-                return {"location": "dm", "content": "All necessary information collected! I'll let you know if anything else is needed and when the request is completed!"}
+                return True, {"location": "dm", "content": "All necessary information collected! I'll let you know if anything else is needed and when the request is completed!"}
             else:
                 #return {"location": "dm", "content": "Still need more information. Please provide the following information: " + self.missing_info}
                 async with self.agent:
@@ -110,63 +110,6 @@ class ReimbursementManager:
                                     self.conversation_history += ("\n" + self.more_info)
                                     if "done" in self.more_info.lower():
                                         self.all_info_collected = True
-                                        return [{"location" : "request", "content" : "Yo wsg chat :)"},
+                                        return True, [{"location" : "request", "content" : "Yo wsg chat :)"},
                                             {"location" : "dm", "content" : "Perfect! All necessary info has been collected! I'll get back to you once there's an update on the status of your request :)"}]
-                                    return {"location": "dm", "content": self.more_info}
-
-        #await self.agent.query(receipt_summary)
-    
-    async def chat(self):
-        """
-        Main chat loop for interacting with the reimbursement manager.
-        """
-        print("=" * 60)
-        print("💼 REIMBURSEMENT MANAGER")
-        print("=" * 60)
-        print("Hello! I'm here to help you with your expense reimbursement.")
-        print("Please start by describing your expense or uploading a receipt image.")
-        print("Type 'quit' or 'exit' to end the conversation.\n")
-        
-        async with self.agent:
-            while True:
-                try:
-                    # Get user input
-                    user_input = input("\nYou: ").strip()
-                    
-                    if user_input.lower() in ['quit', 'exit', 'q']:
-                        print("\nThank you for using the reimbursement service. Have a great day!")
-                        break
-                    
-                    if not user_input:
-                        continue
-                    
-                    # Process the message (this will detect images and handle them)
-                    await self.process_message(user_input=user_input)
-                    
-                    # Receive and display responses from the agent
-                    print("\nReimbursement Manager: ", end="", flush=True)
-                    async for message in self.agent.receive_response():
-                        if isinstance(message, AssistantMessage):
-                            for block in message.content:
-                                if isinstance(block, TextBlock):
-                                    print(block.text, end="", flush=True)
-                            print()  # New line after message
-                        elif isinstance(message, ResultMessage):
-                            # Handle result messages if needed
-                            pass
-                            
-                except KeyboardInterrupt:
-                    print("\n\nConversation interrupted. Goodbye!")
-                    break
-                except Exception as e:
-                    print(f"\nError: {e}")
-                    print("Please try again or type 'quit' to exit.")
-
-async def main():
-    """Main entry point for the reimbursement manager."""
-    manager = ReimbursementManager()
-    await manager.chat()
-
-if __name__ == "__main__":
-    asyncio.run(main())
-
+                                    return False, {"location": "dm", "content": self.more_info}
