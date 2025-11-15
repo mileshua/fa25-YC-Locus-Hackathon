@@ -147,7 +147,17 @@ async def handle_dms(event, say, logger, client):
 
     message_text = event.get("text", "")
     responses = await handle_session_content(user_id, message_text, downloaded_file_names, logger)
-    for response in responses:
+    if isinstance(responses, list):
+        for response in responses:
+            if response and response.get("location") == "dm":
+                await say(response.get("content"))
+            elif response and response.get("location") == "request":
+                await client.chat_postMessage(
+                    channel="C09T45YDXAA",
+                    text=response.get("content"),
+                )
+    else:
+        response = responses
         if response and response.get("location") == "dm":
             await say(response.get("content"))
         elif response and response.get("location") == "request":
