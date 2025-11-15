@@ -3,7 +3,17 @@ const { App } = require("@slack/bolt");
 const { query } = require("@anthropic-ai/claude-agent-sdk");
 const fs = require("fs");
 const path = require("path");
-const { getWalletId, getManagerId, getBudgetInfo } = require("./tools");
+const { 
+  initializeTools, 
+  getWalletId, 
+  getManagerId, 
+  getBudgetInfo, 
+  sendDM,
+  getWalletIdImpl,
+  getManagerIdImpl,
+  getBudgetInfoImpl,
+  sendDMImpl
+} = require("./tools");
 
 /**
  * Initializes Slack Bolt app with SocketMode
@@ -13,6 +23,9 @@ const app = new App({
   socketMode: true,
   appToken: process.env.SLACK_APP_TOKEN,
 });
+
+// Initialize tools with app instance for DM functionality
+initializeTools(app);
 
 /**
  * Process OCR text with Claude and execute Locus payment
@@ -45,6 +58,9 @@ async function processOcrAndPay(ocrText, say, thread_ts) {
 
     const options = {
       mcpServers,
+      // Define custom tools that Claude can use
+      tools: [getWalletId, getManagerId, getBudgetInfo, sendDM],
+      // Use both allowedTools and disallowedTools for reliable blocking (workaround for SDK bugs)
       allowedTools: [
         "mcp__locus__*", // Allow all Locus tools
         "mcp__list_resources",
@@ -52,56 +68,69 @@ async function processOcrAndPay(ocrText, say, thread_ts) {
         "getWalletId",
         "getManagerId", 
         "getBudgetInfo",
+        "sendDM",
       ],
+      permissionMode: "default", // Use default permission mode for controlled execution
       apiKey: process.env.ANTHROPIC_API_KEY,
-      // Auto-approve Locus and custom tool usage
+      // Tool execution handler - this is where we actually execute our custom tools
+      onToolUse: async (toolName, input) => {
+        console.log(`🔧 Executing tool: ${toolName}`);
+        console.log(`   Input:`, JSON.stringify(input, null, 2));
+        
+        try {
+          let result;
+          
+          switch (toolName) {
+            case "getWalletId":
+              result = await getWalletIdImpl(input);
+              break;
+            case "getManagerId":
+              result = await getManagerIdImpl(input);
+              break;
+            case "getBudgetInfo":
+              result = await getBudgetInfoImpl(input);
+              break;
+            case "sendDM":
+              result = await sendDMImpl(input);
+              break;
+            default:
+              throw new Error(`Unknown tool: ${toolName}`);
+          }
+          
+          console.log(`   Result: ${typeof result === 'object' ? JSON.stringify(result) : result}`);
+          return result;
+        } catch (error) {
+          console.error(`❌ Error executing ${toolName}:`, error.message);
+          throw error;
+        }
+      },
+      // Enhanced canUseTool for permission checking only
       canUseTool: async (toolName, input) => {
+        console.log(`🔧 Tool permission check: ${toolName}`);
+        
+        // Allow Locus MCP tools
         if (toolName.startsWith("mcp__locus__")) {
-          console.log(`🔧 Claude is using tool: ${toolName}`);
-          console.log(`   Input:`, JSON.stringify(input, null, 2));
+          console.log(`✅ Allowing Locus tool: ${toolName}`);
           return {
             behavior: "allow",
             updatedInput: input,
           };
         }
         
-        // Handle custom tools
-        if (["getWalletId", "getManagerId", "getBudgetInfo"].includes(toolName)) {
-          console.log(`🔧 Claude is using custom tool: ${toolName}`);
-          console.log(`   Input:`, JSON.stringify(input, null, 2));
-          
-          // Execute the custom tool and return the result
-          let result;
-          try {
-            switch (toolName) {
-              case "getWalletId":
-                result = getWalletId(input.slackUserId);
-                break;
-              case "getManagerId":
-                result = getManagerId(input.slackUserId);
-                break;
-              case "getBudgetInfo":
-                result = getBudgetInfo(input.slackUserId);
-                break;
-            }
-            
-            return {
-              behavior: "allow",
-              updatedInput: input,
-              result: result,
-            };
-          } catch (error) {
-            return {
-              behavior: "allow",
-              updatedInput: input,
-              result: `Error executing ${toolName}: ${error.message}`,
-            };
-          }
+        // Allow custom tools (execution handled by onToolUse)
+        if (["getWalletId", "getManagerId", "getBudgetInfo", "sendDM"].includes(toolName)) {
+          console.log(`✅ Allowing custom tool: ${toolName}`);
+          return {
+            behavior: "allow",
+            updatedInput: input,
+          };
         }
         
+        // Deny all other tools
+        console.log(`🚫 Denying unknown tool: ${toolName}`);
         return {
           behavior: "deny",
-          message: "Only Locus and custom tools are allowed",
+          message: `Tool ${toolName} is not in the allowed list. Only Locus and custom payment tools are permitted.`,
         };
       },
     };

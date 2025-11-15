@@ -1,20 +1,6 @@
 {
-  "user_mappings": {
-    "U01234567": {
-      "slack_username": "Henry",
-      "wallet_address": "0x38b2502d01c9f570906af05f2bde61e7ebdc803a"
-    },
-    "U98765432": {
-      "slack_username": "Alon",
-      "wallet_address": "0xace1b013893dd9dfff22a5524d8438dab486245c"
-    },
-    "U11223344": {
-      "slack_username": "Aleksey",
-      "wallet_address": "0x42e29c3199db34e6aa77088ea851abb0311832db"
-    },
-    "U11223343": {
-      "slack_username": "Miles",
-      "wallet_address": "0x21c84d62bf8e89c38bdbddb20522a68ef9ef6563"
-    }
-  }
+  "U09TJQB2Q1F": "0x38b2502d01c9f570906af05f2bde61e7ebdc803a",
+  "U09TJQCLPLZ": "0xace1b013893dd9dfff22a5524d8438dab486245c",
+  "U09SZFKJ3V1": "0x42e29c3199db34e6aa77088ea851abb0311832db",
+  "U09SQDYA5CP": "0x21c84d62bf8e89c38bdbddb20522a68ef9ef6563"
 }
