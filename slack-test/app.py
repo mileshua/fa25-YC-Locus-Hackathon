@@ -102,7 +102,7 @@ async def handle_session_content(user_id, message_content, downloaded_file_names
         print("session found")
         print("session: " + str(session))
 
-    return await client.new_message(user_id, message_content, downloaded_file_names)
+    return await client.new_dm_message(user_id, message_content, downloaded_file_names)
     
 
 
