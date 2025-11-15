@@ -117,7 +117,6 @@ async def handle_dms(event, say, logger, client):
     
     # Set thinking status
     channel = event.get("channel")
-    print(json.dumps(event, indent=4))
     thread_ts = event.get("thread_ts")  # Use message timestamp as thread_ts for DMs
     try:
         await client.assistant_threads_setStatus(
@@ -148,9 +147,13 @@ async def handle_dms(event, say, logger, client):
 
     message_text = event.get("text", "")
     response = await handle_session_content(user_id, message_text, downloaded_file_names, logger)
-    print(response)
     if response and response.get("location") == "dm":
         await say(response.get("content"))
+    elif response and response.get("location") == "request":
+        await client.chat_postMessage(
+            channel="C09T45YDXAA",
+            text=response.get("content"),
+        )
     
     # Clear thinking status after processing is complete
     try:
