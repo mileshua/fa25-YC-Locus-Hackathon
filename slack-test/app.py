@@ -117,7 +117,7 @@ async def handle_dms(event, say, logger, client):
     
     # Set thinking status
     channel = event.get("channel")
-    thread_ts = event.get("thread_ts")  # Use message timestamp as thread_ts for DMs
+    thread_ts = event.get("thread_ts") or event.get("ts")  # Use message timestamp as thread_ts for DMs
     try:
         await client.assistant_threads_setStatus(
             channel_id=channel,
