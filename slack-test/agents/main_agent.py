@@ -1,5 +1,6 @@
 import asyncio
 import os
+import re
 import warnings
 from dotenv import load_dotenv
 from claude_agent_sdk import (
@@ -11,6 +12,8 @@ from claude_agent_sdk import (
     UserMessage
 )
 from pathlib import Path
+
+from pydantic.type_adapter import R
 from agents.ocr import extract_text
 
 # Suppress ResourceWarnings from anyio streams in claude-agent-sdk
@@ -26,7 +29,7 @@ class ReimbursementManager:
     Handles receipt submissions, validates information, and processes reimbursement requests.
     """
     
-    def __init__(self):
+    def __init__(self, user_id: str):
         self.options = ClaudeAgentOptions()
         self.options.api_key = os.getenv("ANTHROPIC_API_KEY")
         self.options.temperature = 0.7  # Slightly higher for more natural conversation
@@ -46,6 +49,8 @@ class ReimbursementManager:
 
         self.valid_receipt = False
         self.all_info_collected = False
+
+        self.user_id = user_id
 
     def extract_recipt_data(self, downloaded_file_names: list):
         # Acknowledge the upload
@@ -88,18 +93,18 @@ class ReimbursementManager:
                                     if isinstance(block, TextBlock):
                                         self.more_info = block.text
                                         self.conversation_history += ("\n" + self.more_info)
-                                        return {"location": "dm", "content": self.more_info}
+                                        return False, {"location": "dm", "content": self.more_info}
                 else:
-                    return {"location": "dm", "content": message}
+                    return False, {"location": "dm", "content": message}
             else:
-                return {"location": "dm", "content": "No files uploaded. Please upload a receipt image."}
+                return False, {"location": "dm", "content": "No files uploaded. Please upload a receipt image."}
         else:
             if self.all_info_collected:
-                return {"location": "dm", "content": "All necessary information collected! I'll let you know if anything else is needed and when the request is completed!"}
+                return True, {"location": "dm", "content": "All necessary information collected! I'll let you know if anything else is needed and when the request is completed!"}
             else:
                 #return {"location": "dm", "content": "Still need more information. Please provide the following information: " + self.missing_info}
                 async with self.agent:
-                    all_info_message = " If all necessary information has been found, simply say 'done'"
+                    all_info_message = " If all necessary information has been found, reply 'done'. DO NOT SAY ANYTHING ELSE IN RESPONSE TO THIS PART OF THE PROMPT!"
                     await self.agent.query(self.conversation_history + message_content + all_info_message)
                     self.conversation_history += ("\n" + message_content + all_info_message)
                     async for message in self.agent.receive_response():
@@ -108,65 +113,71 @@ class ReimbursementManager:
                                 if isinstance(block, TextBlock):
                                     self.more_info = block.text
                                     self.conversation_history += ("\n" + self.more_info)
-                                    if self.more_info == "done":
+                                    if "done" in self.more_info.lower():
                                         self.all_info_collected = True
-                                        return [{"location" : "request", "content" : "Yo wsg chat :)"},
-                                            {"location" : "dm", "content" : "Perfect! All necessary info has been collected! I'll get back to you once there's an update on the status of your request :)"}]
-                                    return {"location": "dm", "content": self.more_info}
-
-        #await self.agent.query(receipt_summary)
-    
-    async def chat(self):
-        """
-        Main chat loop for interacting with the reimbursement manager.
-        """
-        print("=" * 60)
-        print("💼 REIMBURSEMENT MANAGER")
-        print("=" * 60)
-        print("Hello! I'm here to help you with your expense reimbursement.")
-        print("Please start by describing your expense or uploading a receipt image.")
-        print("Type 'quit' or 'exit' to end the conversation.\n")
-        
-        async with self.agent:
-            while True:
-                try:
-                    # Get user input
-                    user_input = input("\nYou: ").strip()
-                    
-                    if user_input.lower() in ['quit', 'exit', 'q']:
-                        print("\nThank you for using the reimbursement service. Have a great day!")
-                        break
-                    
-                    if not user_input:
-                        continue
-                    
-                    # Process the message (this will detect images and handle them)
-                    await self.process_message(user_input=user_input)
-                    
-                    # Receive and display responses from the agent
-                    print("\nReimbursement Manager: ", end="", flush=True)
+                                    else:
+                                        return False, {"location": "dm", "content": self.more_info}
+                    reimbursement_request = self.build_reimbursement_request()
+                    self.conversation_history += ("\n" + reimbursement_request)
+                    await self.agent.query(self.conversation_history)
                     async for message in self.agent.receive_response():
                         if isinstance(message, AssistantMessage):
                             for block in message.content:
                                 if isinstance(block, TextBlock):
-                                    print(block.text, end="", flush=True)
-                            print()  # New line after message
-                        elif isinstance(message, ResultMessage):
-                            # Handle result messages if needed
-                            pass
-                            
-                except KeyboardInterrupt:
-                    print("\n\nConversation interrupted. Goodbye!")
-                    break
-                except Exception as e:
-                    print(f"\nError: {e}")
-                    print("Please try again or type 'quit' to exit.")
+                                    self.reimbursement_request_response = block.text
+                                    self.conversation_history += ("\n" + self.reimbursement_request_response)
+                                    return True, [{"location" : "request", "content" : self.reimbursement_request_response},
+                                        {"location" : "dm", "content" : "Perfect! All necessary info has been collected! I'll get back to you once there's an update on the status of your request :)"}]
 
-async def main():
-    """Main entry point for the reimbursement manager."""
-    manager = ReimbursementManager()
-    await manager.chat()
+    def build_reimbursement_request(self):
+        prompt = f"""
+You are generating a Slack message for an expense reimbursement request.
 
-if __name__ == "__main__":
-    asyncio.run(main())
+Follow these rules STRICTLY:
 
+1. Use Slack markdown for readability.
+2. Use the section headers and order EXACTLY as specified below.
+3. Do not add any extra sections, prefixes, or explanations.
+
+The message must have these sections in this exact order:
+
+PAYMENT REQUEST
+RECEIPT DATA
+USER
+DETAILS
+
+Format each section as follows:
+
+1) PAYMENT REQUEST
+
+2) RECEIPT DATA
+- On the line immediately after 'RECEIPT DATA', output the exact receipt dictionary (provided previously in this conversation) as valid JSON.
+- Wrap the JSON in a Slack code block by placing '```' on the line before the JSON and '```' on the line after the JSON.
+- Preserve all keys, values, and types from the original dictionary. Do NOT rename keys, add new keys, or drop existing keys.
+- Use indentation (tabs or spaces) so the JSON is easy for a human to read.
+
+3) USER
+- On the line immediately after 'USER', output the Slack mention for the requesting user in this exact format:
+  <@{self.user_id}>
+- Do not add anything else on this line.
+
+4) DETAILS
+- After 'DETAILS', write 1–3 concise sentences describing:
+  - what was purchased (group similar items),
+  - why it was purchased / business purpose,
+  - any project or cost center information mentioned by the user.
+- Be brief, specific, and professional. Do not exceed 3 sentences.
+- Do NOT repeat the raw JSON; this section is a natural-language summary only.
+
+Global style guidelines (must be followed strictly):
+- Neutral, professional tone.
+- In order to bold items use single asterisks like so: *bolded text*. DO NOT USE DOUBLE ASTERISKS ANYWHERE.
+- Do NOT invent vendor names, dates, payment methods, or project names that are not supported by the receipt data or prior conversation. If something is unknown, write 'Unknown'.
+- Always format currency as '$XX.XX' with two decimal places.
+- Return ONLY the final Slack message in the required format. Do not include any additional commentary, markdown fences around the entire message, or debugging information.
+- In order to bold items use single asterisks like so: *bolded text*. DO NOT USE DOUBLE ASTERISKS ANYWHERE.
+
+Using the receipt dictionary and prior user messages, now produce the Slack reimbursement request message.
+"""
+        
+        return prompt
