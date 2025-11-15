@@ -70,7 +70,10 @@ def handle_file_uploads(event, say, logger, client):
                 for file_name in downloaded_files:
                     obj = extract_text(downloads_dir / file_name)
                     if obj["is_receipt"]:
-                        say(f"Receipt detected! Here's the information: {obj}")
+                        if obj["too_blurry"]:
+                            say("The receipt is too blurry to read. Please send a clearer image.")
+                        else:
+                            say(f"Receipt detected! Here's the information: {obj}")
                     else:
                         say("This is not a receipt.")
             else:

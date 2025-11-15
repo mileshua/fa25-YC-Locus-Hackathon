@@ -3,6 +3,7 @@ If it is, extract information about the price of each item and the total price.
 - Make sure the name is readable and interpretable. Sometimes the receipt name is not clear, so you should write a simple descriptive, readable name.
 - Make sure the price is in dollars.
 - Make sure the total is in dollars.
+If it is a receipt but it is too blurry to read, DO NOT TRY TO GUESS THE VALUES. Say that it is a receipt, but add a note that it is too blurry to read.
 If it is not, say that it is not a receipt.
 
 The format of your response should be in a json object with no reasoning or clarification. It should not use a code block, it should just be in plain text.
@@ -10,6 +11,7 @@ It should be in the following format:
 
 {
     "is_receipt": true,
+    "too_blurry": false,
     "items": [
         {
             "name": "Item name",
@@ -17,6 +19,12 @@ It should be in the following format:
         }
     ],
     "total": <Total price> (float, in dollars)
+}
+
+If the receipt is too blurry to read, return the following json object:
+{
+    "is_receipt": true,
+    "too_blurry": true
 }
 
 If it is not a receipt, return the following json object:
