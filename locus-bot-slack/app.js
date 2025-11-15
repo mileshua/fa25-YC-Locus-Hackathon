@@ -1,6 +1,9 @@
 require("dotenv").config();
 const { App } = require("@slack/bolt");
 const { query } = require("@anthropic-ai/claude-agent-sdk");
+const fs = require("fs");
+const path = require("path");
+const { getWalletId, getManagerId, getBudgetInfo } = require("./tools");
 
 /**
  * Initializes Slack Bolt app with SocketMode
@@ -46,9 +49,12 @@ async function processOcrAndPay(ocrText, say, thread_ts) {
         "mcp__locus__*", // Allow all Locus tools
         "mcp__list_resources",
         "mcp__read_resource",
+        "getWalletId",
+        "getManagerId", 
+        "getBudgetInfo",
       ],
       apiKey: process.env.ANTHROPIC_API_KEY,
-      // Auto-approve Locus tool usage
+      // Auto-approve Locus and custom tool usage
       canUseTool: async (toolName, input) => {
         if (toolName.startsWith("mcp__locus__")) {
           console.log(`🔧 Claude is using tool: ${toolName}`);
@@ -58,24 +64,51 @@ async function processOcrAndPay(ocrText, say, thread_ts) {
             updatedInput: input,
           };
         }
+        
+        // Handle custom tools
+        if (["getWalletId", "getManagerId", "getBudgetInfo"].includes(toolName)) {
+          console.log(`🔧 Claude is using custom tool: ${toolName}`);
+          console.log(`   Input:`, JSON.stringify(input, null, 2));
+          
+          // Execute the custom tool and return the result
+          let result;
+          try {
+            switch (toolName) {
+              case "getWalletId":
+                result = getWalletId(input.slackUserId);
+                break;
+              case "getManagerId":
+                result = getManagerId(input.slackUserId);
+                break;
+              case "getBudgetInfo":
+                result = getBudgetInfo(input.slackUserId);
+                break;
+            }
+            
+            return {
+              behavior: "allow",
+              updatedInput: input,
+              result: result,
+            };
+          } catch (error) {
+            return {
+              behavior: "allow",
+              updatedInput: input,
+              result: `Error executing ${toolName}: ${error.message}`,
+            };
+          }
+        }
+        
         return {
           behavior: "deny",
-          message: "Only Locus tools are allowed",
+          message: "Only Locus and custom tools are allowed",
         };
       },
     };
 
-    // Create a prompt that asks Claude to extract payment info and execute payment
-    const prompt = `You are an automated payment processing assistant. I have received the following text from an OCR scan of a receipt or invoice:
-
-${ocrText}
-
-Please analyze this text and:
-1. Extract any payment-related information (amount, recipient, description, etc.)
-2. If you find a payment request with clear amount and recipient information, AUTOMATICALLY use the Locus tools to process the payment immediately
-3. If the information is unclear or incomplete, explain what's missing
-
-You are authorized to process payments automatically. Do not ask for confirmation - just process valid payment requests immediately using the Locus payment tools.`;
+    // Load prompt template from file and substitute OCR text
+    const promptTemplate = fs.readFileSync(path.join(__dirname, "prompt", "main.txt"), "utf8");
+    const prompt = promptTemplate.replace("${ocrText}", ocrText);
 
     console.log("🎯 Sending to Claude with Locus tools access...\n");
     console.log("─".repeat(50));
