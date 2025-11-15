@@ -1,0 +1,13 @@
+prefix=/Users/alekseyvalouev/Desktop/Berkeley/Hackathons/fa25-YC-Locus-Hackathon/agent-to-agent-test/env
+exec_prefix=${prefix}
+libdir=${exec_prefix}/lib
+includedir=${prefix}/include
+
+Name: expat
+Version: 2.7.1
+Description: expat XML parser
+URL: https://libexpat.github.io/
+Libs: -L${libdir} -lexpat
+Libs.private: 
+Cflags: -I${includedir}
+Cflags.private: -DXML_STATIC
