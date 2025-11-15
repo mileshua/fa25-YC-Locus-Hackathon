@@ -130,14 +130,54 @@ class ReimbursementManager:
                                         {"location" : "dm", "content" : "Perfect! All necessary info has been collected! I'll get back to you once there's an update on the status of your request :)"}]
 
     def build_reimbursement_request(self):
-        prompt = f"""Build a reimbursement request in the following format. The message must be EXACTLY in the following format:
-        PAYMENT REQUEST
-        RECEIPT DATA
-        Dictionary of receipt data provided previously in this conversation. Format in JSON format including tabs. 
-        USER
-        <@{self.user_id}>
-        DETAILS
-        Synthesize any additional information that you collected from the user that may be pertinent to the reimbursement request into 1-3 sentences. Be brief instead of rambling.
-        """
+        prompt = f"""
+You are generating a Slack message for an expense reimbursement request.
+
+Follow these rules STRICTLY:
+
+1. Use Slack markdown for readability.
+2. Use the section headers and order EXACTLY as specified below.
+3. Do not add any extra sections, prefixes, or explanations.
+
+The message must have these sections in this exact order:
+
+PAYMENT REQUEST
+RECEIPT DATA
+USER
+DETAILS
+
+Format each section as follows:
+
+1) PAYMENT REQUEST
+
+2) RECEIPT DATA
+- On the line immediately after 'RECEIPT DATA', output the exact receipt dictionary (provided previously in this conversation) as valid JSON.
+- Wrap the JSON in a Slack code block by placing '```' on the line before the JSON and '```' on the line after the JSON.
+- Preserve all keys, values, and types from the original dictionary. Do NOT rename keys, add new keys, or drop existing keys.
+- Use indentation (tabs or spaces) so the JSON is easy for a human to read.
+
+3) USER
+- On the line immediately after 'USER', output the Slack mention for the requesting user in this exact format:
+  <@{self.user_id}>
+- Do not add anything else on this line.
+
+4) DETAILS
+- After 'DETAILS', write 1–3 concise sentences describing:
+  - what was purchased (group similar items),
+  - why it was purchased / business purpose,
+  - any project or cost center information mentioned by the user.
+- Be brief, specific, and professional. Do not exceed 3 sentences.
+- Do NOT repeat the raw JSON; this section is a natural-language summary only.
+
+Global style guidelines (must be followed strictly):
+- Neutral, professional tone.
+- In order to bold items use single asterisks like so: *bolded text*. DO NOT USE DOUBLE ASTERISKS ANYWHERE.
+- Do NOT invent vendor names, dates, payment methods, or project names that are not supported by the receipt data or prior conversation. If something is unknown, write 'Unknown'.
+- Always format currency as '$XX.XX' with two decimal places.
+- Return ONLY the final Slack message in the required format. Do not include any additional commentary, markdown fences around the entire message, or debugging information.
+- In order to bold items use single asterisks like so: *bolded text*. DO NOT USE DOUBLE ASTERISKS ANYWHERE.
+
+Using the receipt dictionary and prior user messages, now produce the Slack reimbursement request message.
+"""
         
         return prompt
