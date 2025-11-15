@@ -42,7 +42,10 @@ class ReimbursementManager:
         self.options.system_prompt = system_prompt
         self.agent = ClaudeSDKClient(self.options)
 
+        self.conversation_history = ""
+
         self.valid_receipt = False
+        self.all_info_collected = False
 
     def extract_recipt_data(self, downloaded_file_names: list):
         # Acknowledge the upload
@@ -70,15 +73,42 @@ class ReimbursementManager:
             if downloaded_file_names:
                 self.valid_receipt, message = self.extract_recipt_data(downloaded_file_names)
                 async with self.agent:
-                    await self.agent.query(f"Receipt is valid: {self.valid_receipt}. " + message)
+                    prompt = f"Receipt is valid: {self.valid_receipt}." + message
+                    if self.valid_receipt:
+                        prompt += "Here is the receipt info. Remember this and remember that a valid receipt has been provided. Move onto Phase 2 next. Also infer any context and information possible from the provided receipt info:  " + message
+                    await self.agent.query(self.conversation_history + prompt)
+                    self.conversation_history += ("\n" + prompt)
                 if self.valid_receipt:
-                    return {"location": "dm", "content": message}
+                    async with self.agent:
+                        await self.agent.query(self.conversation_history + ("\n" +"A valid receipt has been provided. Now ask the user about any more info you need that isn't on the receipt. Do not regurgitate receipt details unless you are asked to."))
+                        self.conversation_history += ("\n" +"A valid receipt has been provided. Now ask the user about any more info you need that isn't on the receipt. Do not regurgitate receipt details unless you are asked to.")
+                        async for message in self.agent.receive_response():
+                            if isinstance(message, AssistantMessage):
+                                for block in message.content:
+                                    if isinstance(block, TextBlock):
+                                        self.more_info = block.text
+                                        self.conversation_history += ("\n" + self.more_info)
+                                        return {"location": "dm", "content": self.more_info}
                 else:
                     return {"location": "dm", "content": message}
             else:
                 return {"location": "dm", "content": "No files uploaded. Please upload a receipt image."}
         else:
-            return {"location": "dm", "content": "No more receipt images needed at this time."}
+            if self.all_info_collected:
+                return {"location": "dm", "content": "All necessary information collected! I'll let you know if anything else is needed and when the request is completed!"}
+            else:
+                #return {"location": "dm", "content": "Still need more information. Please provide the following information: " + self.missing_info}
+                async with self.agent:
+                    await self.agent.query(self.conversation_history + message_content)
+                    self.conversation_history += ("\n" + message_content)
+                    async for message in self.agent.receive_response():
+                        if isinstance(message, AssistantMessage):
+                            for block in message.content:
+                                if isinstance(block, TextBlock):
+                                    self.more_info = block.text
+                                    self.conversation_history += ("\n" + self.more_info)
+                                    return {"location": "dm", "content": self.more_info}
+
         #await self.agent.query(receipt_summary)
     
     async def chat(self):
