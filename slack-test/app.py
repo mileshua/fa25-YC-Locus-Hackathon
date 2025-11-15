@@ -15,7 +15,7 @@ manager = SessionManager()
 
 # Configure logging to display in terminal
 logging.basicConfig(
-    level=logging.INFO,
+    level=logging.WARNING,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     datefmt='%Y-%m-%d %H:%M:%S'
 )
@@ -114,6 +114,25 @@ async def handle_dms(event, say, logger, client):
     if channel_type != "im":
         return
     
+    # Set thinking status
+    channel = event.get("channel")
+    thread_ts = event.get("ts")  # Use message timestamp as thread_ts for DMs
+    try:
+        await client.assistant_threads_setStatus(
+            channel_id=channel,
+            thread_ts=thread_ts,
+            status="thinking...",
+            loading_messages=[
+                "Teaching the hamsters to type faster…",
+                "Untangling the internet cables…",
+                "Consulting the office goldfish…",
+                "Polishing up the response just for you…",
+                "Convincing the AI to stop overthinking…",
+            ],
+        )
+    except Exception as e:
+        logger.warning(f"Failed to set thinking status: {str(e)}")
+    
     # Only handle file_share subtype (file uploads)
     downloaded_file_names = []
     user_id = event.get("user")
@@ -130,6 +149,16 @@ async def handle_dms(event, say, logger, client):
     print(response)
     if response and response.get("location") == "dm":
         await say(response.get("content"))
+    
+    # Clear thinking status after processing is complete
+    try:
+        await client.assistant_threads_setStatus(
+            channel_id=channel,
+            thread_ts=thread_ts,
+            status="",
+        )
+    except Exception as e:
+        logger.warning(f"Failed to clear thinking status: {str(e)}")
 
 
 # Start your app
