@@ -1,5 +1,6 @@
 import asyncio
 import os
+import re
 import warnings
 from dotenv import load_dotenv
 from claude_agent_sdk import (
@@ -11,6 +12,8 @@ from claude_agent_sdk import (
     UserMessage
 )
 from pathlib import Path
+
+from pydantic.type_adapter import R
 from agents.ocr import extract_text
 
 # Suppress ResourceWarnings from anyio streams in claude-agent-sdk
@@ -26,7 +29,7 @@ class ReimbursementManager:
     Handles receipt submissions, validates information, and processes reimbursement requests.
     """
     
-    def __init__(self):
+    def __init__(self, user_id: str):
         self.options = ClaudeAgentOptions()
         self.options.api_key = os.getenv("ANTHROPIC_API_KEY")
         self.options.temperature = 0.7  # Slightly higher for more natural conversation
@@ -46,6 +49,8 @@ class ReimbursementManager:
 
         self.valid_receipt = False
         self.all_info_collected = False
+
+        self.user_id = user_id
 
     def extract_recipt_data(self, downloaded_file_names: list):
         # Acknowledge the upload
@@ -98,19 +103,44 @@ class ReimbursementManager:
             if self.valid_receipt and downloaded_file_names:
                 return False, {"location": "dm", "content": "A valid receipt has already been provided! If you would like to reinburse a new receipt, please make a new request."}
             if self.all_info_collected:
-                return True, {"location": "dm", "content": "All necessary information collected! I'll let you know if anything else is needed and if the request is approved!"}
-            async with self.agent:
-                all_info_message = " If all necessary information has been found, simply say 'done'"
-                await self.agent.query(self.conversation_history + message_content + all_info_message)
-                self.conversation_history += ("\n" + message_content + all_info_message)
-                async for message in self.agent.receive_response():
-                    if isinstance(message, AssistantMessage):
-                        for block in message.content:
-                            if isinstance(block, TextBlock):
-                                self.more_info = block.text
-                                self.conversation_history += ("\n" + self.more_info)
-                                if "done" in self.more_info.lower():
-                                    self.all_info_collected = True
-                                    return True, [{"location" : "request", "content" : "Yo wsg chat :)"},
+                return True, {"location": "dm", "content": "All necessary information collected! I'll let you know if anything else is needed and when the request is completed!"}
+            else:
+                #return {"location": "dm", "content": "Still need more information. Please provide the following information: " + self.missing_info}
+                async with self.agent:
+                    all_info_message = " If all necessary information has been found, reply 'done'. DO NOT SAY ANYTHING ELSE IN RESPONSE TO THIS PART OF THE PROMPT!"
+                    await self.agent.query(self.conversation_history + message_content + all_info_message)
+                    self.conversation_history += ("\n" + message_content + all_info_message)
+                    async for message in self.agent.receive_response():
+                        if isinstance(message, AssistantMessage):
+                            for block in message.content:
+                                if isinstance(block, TextBlock):
+                                    self.more_info = block.text
+                                    self.conversation_history += ("\n" + self.more_info)
+                                    if "done" in self.more_info.lower():
+                                        self.all_info_collected = True
+                                    else:
+                                        return False, {"location": "dm", "content": self.more_info}
+                    reimbursement_request = self.build_reimbursement_request()
+                    self.conversation_history += ("\n" + reimbursement_request)
+                    await self.agent.query(self.conversation_history)
+                    async for message in self.agent.receive_response():
+                        if isinstance(message, AssistantMessage):
+                            for block in message.content:
+                                if isinstance(block, TextBlock):
+                                    self.reimbursement_request_response = block.text
+                                    self.conversation_history += ("\n" + self.reimbursement_request_response)
+                                    return True, [{"location" : "request", "content" : self.reimbursement_request_response},
                                         {"location" : "dm", "content" : "Perfect! All necessary info has been collected! I'll get back to you once there's an update on the status of your request :)"}]
-                                return False, {"location": "dm", "content": self.more_info}
+
+    def build_reimbursement_request(self):
+        prompt = f"""Build a reimbursement request in the following format. The message must be EXACTLY in the following format:
+        PAYMENT REQUEST
+        RECEIPT DATA
+        Dictionary of receipt data provided previously in this conversation. Format in JSON format including tabs. 
+        USER
+        <@{self.user_id}>
+        DETAILS
+        Synthesize any additional information that you collected from the user that may be pertinent to the reimbursement request into 1-3 sentences. Be brief instead of rambling.
+        """
+        
+        return prompt

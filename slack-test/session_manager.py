@@ -40,7 +40,7 @@ class SessionManager:
         created_at = start_time if start_time is not None else time.perf_counter()
         
         # Create a new ReimbursementManager instance for this session
-        manager = ReimbursementManager()
+        manager = ReimbursementManager(session_id)
         
         # Store the session
         self.sessions[session_id] = {
