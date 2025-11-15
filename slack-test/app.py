@@ -7,21 +7,10 @@ from slack_bolt.adapter.socket_mode import SocketModeHandler
 import time
 import math
 from ocr import extract_text
-
-
-class SessionManager:
-    def create_session(self, user_id, start_time):
-        pass
-    def delete_session(self, user_id):
-        pass
-    def get_sessions(self):
-        pass
-    def new_message(self, user_id, message_content, downloaded_file_names):
-        pass
+from session_manager import SessionManager
 
 client = SessionManager()
 
-API_URL = "http://localhost:8000/"
 # Configure logging to display in terminal
 logging.basicConfig(
     level=logging.INFO,
@@ -99,13 +88,18 @@ def download_files(user_id, files, client, logger):
 
 def handle_session_content(user_id, message_content, downloaded_file_names, logger):
     sessions = client.get_sessions()
+    print("sessions: " + str(sessions))
     session = sessions.get(user_id)
     if not session or session.get("start_time", math.inf) - time.perf_counter() > 300: # 5 minutes
+        print("no session found")
         if session:
             client.delete_session(user_id)
         client.create_session(user_id, time.perf_counter())
+    else:
+        print("session found")
+        print("session: " + str(session))
 
-    client.new_message(user_id, message_content, downloaded_file_names)
+    return client.new_message(user_id, message_content, downloaded_file_names)
     
 
 
