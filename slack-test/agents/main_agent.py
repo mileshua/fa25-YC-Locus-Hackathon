@@ -69,19 +69,19 @@ class ReimbursementManager:
         Process a user message, detect images, and handle the reimbursement workflow.
         """
         
-        if self.valid_receipt == False:
+        if not self.valid_receipt:
             if downloaded_file_names:
                 self.valid_receipt, message = self.extract_recipt_data(downloaded_file_names)
                 async with self.agent:
-                    prompt = f"Receipt is valid: {self.valid_receipt}." + message
+                    prompt = f"Receipt is valid: {self.valid_receipt}."
                     if self.valid_receipt:
                         prompt += "Here is the receipt info. Remember this and remember that a valid receipt has been provided. Move onto Phase 2 next. Also infer any context and information possible from the provided receipt info:  " + message
                     await self.agent.query(self.conversation_history + prompt)
                     self.conversation_history += ("\n" + prompt)
                 if self.valid_receipt:
                     async with self.agent:
-                        await self.agent.query(self.conversation_history + ("\n" +"A valid receipt has been provided. Now ask the user about any more info you need that isn't on the receipt. Do not regurgitate receipt details unless you are asked to."))
                         self.conversation_history += ("\n" +"A valid receipt has been provided. Now ask the user about any more info you need that isn't on the receipt. Do not regurgitate receipt details unless you are asked to.")
+                        await self.agent.query(self.conversation_history)
                         async for message in self.agent.receive_response():
                             if isinstance(message, AssistantMessage):
                                 for block in message.content:
@@ -92,24 +92,25 @@ class ReimbursementManager:
                 else:
                     return False, {"location": "dm", "content": message}
             else:
-                return False, {"location": "dm", "content": "No files uploaded. Please upload a receipt image."}
+                return False, {"location": "dm", "content": "To start a reinbursement request, please upload a receipt image!"}
         else:
+
+            if self.valid_receipt and downloaded_file_names:
+                return False, {"location": "dm", "content": "A valid receipt has already been provided! If you would like to reinburse a new receipt, please make a new request."}
             if self.all_info_collected:
-                return True, {"location": "dm", "content": "All necessary information collected! I'll let you know if anything else is needed and when the request is completed!"}
-            else:
-                #return {"location": "dm", "content": "Still need more information. Please provide the following information: " + self.missing_info}
-                async with self.agent:
-                    all_info_message = " If all necessary information has been found, simply say 'done'"
-                    await self.agent.query(self.conversation_history + message_content + all_info_message)
-                    self.conversation_history += ("\n" + message_content + all_info_message)
-                    async for message in self.agent.receive_response():
-                        if isinstance(message, AssistantMessage):
-                            for block in message.content:
-                                if isinstance(block, TextBlock):
-                                    self.more_info = block.text
-                                    self.conversation_history += ("\n" + self.more_info)
-                                    if "done" in self.more_info.lower():
-                                        self.all_info_collected = True
-                                        return True, [{"location" : "request", "content" : "Yo wsg chat :)"},
-                                            {"location" : "dm", "content" : "Perfect! All necessary info has been collected! I'll get back to you once there's an update on the status of your request :)"}]
-                                    return False, {"location": "dm", "content": self.more_info}
+                return True, {"location": "dm", "content": "All necessary information collected! I'll let you know if anything else is needed and if the request is approved!"}
+            async with self.agent:
+                all_info_message = " If all necessary information has been found, simply say 'done'"
+                await self.agent.query(self.conversation_history + message_content + all_info_message)
+                self.conversation_history += ("\n" + message_content + all_info_message)
+                async for message in self.agent.receive_response():
+                    if isinstance(message, AssistantMessage):
+                        for block in message.content:
+                            if isinstance(block, TextBlock):
+                                self.more_info = block.text
+                                self.conversation_history += ("\n" + self.more_info)
+                                if "done" in self.more_info.lower():
+                                    self.all_info_collected = True
+                                    return True, [{"location" : "request", "content" : "Yo wsg chat :)"},
+                                        {"location" : "dm", "content" : "Perfect! All necessary info has been collected! I'll get back to you once there's an update on the status of your request :)"}]
+                                return False, {"location": "dm", "content": self.more_info}
