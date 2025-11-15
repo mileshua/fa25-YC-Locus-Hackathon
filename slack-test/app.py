@@ -126,26 +126,6 @@ def handle_dms(event, say, logger, client):
         # Download files
         downloaded_file_names = download_files(user_id, files, client, logger)
 
-        # Acknowledge the upload
-        if downloaded_file_names:
-            files_list = ", ".join(downloaded_file_names)
-
-            # Acknowledge the upload
-            if len(downloaded_file_names) > 0:
-                for file_name in downloaded_file_names:
-                    obj = extract_text(Path("downloads") / file_name)
-                    if obj["is_receipt"]:
-                        if obj["too_blurry"]:
-                            say("The receipt is too blurry to read. Please send a clearer image.")
-                        else:
-                            say(f"Receipt detected! Here's the information: {obj}")
-                    else:
-                        say("This is not a receipt.")
-            else:
-                say("Thanks for sending the file! I encountered an error downloading it. 📁")
-                logger.info(f"Sent notification to #reinbursements channel for files: {files_list}")
-        else:
-            say("Thanks for sending the file! I encountered an error downloading it. 📁")
     
     response = handle_session_content(user_id, message_text, downloaded_file_names, logger)
 

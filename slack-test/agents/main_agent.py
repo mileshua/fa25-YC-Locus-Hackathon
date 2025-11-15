@@ -9,6 +9,8 @@ from claude_agent_sdk import (
     ResultMessage,
     UserMessage
 )
+from pathlib import Path
+from ocr import extract_text
 
 # Load environment variables from .env file
 load_dotenv()
@@ -28,143 +30,44 @@ class ReimbursementManager:
         self.options.frequency_penalty = 0
         
         # Set system prompt for the reimbursement manager role
-        system_prompt = """You are a professional reimbursement manager helping employees submit expense reports. 
-
-Your primary responsibilities:
-1. Request and collect receipt images from users for their expense reimbursement requests
-2. Review submitted receipts (even if they appear as placeholder data for now)
-3. Extract and verify key information from receipts:
-   - Date of purchase
-   - Merchant/vendor name
-   - Total amount
-   - Itemized expenses (if available)
-   - Payment method
-   - Business purpose/category
-4. Identify any missing or unclear information
-5. Request additional details when needed (e.g., business purpose, approval code, project code)
-6. Provide clear, friendly guidance throughout the reimbursement process
-7. Confirm when all required information is collected
-
-Communication style:
-- Be professional, friendly, and helpful
-- Use clear, concise language
-- Ask one question at a time when requesting information
-- Acknowledge receipt submissions promptly
-- Explain what information you found and what might be missing
-
-When processing a receipt (even with dummy data), you should:
-- Summarize the key information you "found"
-- Point out any fields that appear missing or unclear
-- Ask specific follow-up questions if needed
-- Confirm the reimbursement amount before finalizing
-
-Remember: Your goal is to make the reimbursement process smooth and efficient for employees."""
+        system_prompt = open("prompts/user_interactions.txt", "r").read()
 
         self.options.system = system_prompt
         self.agent = ClaudeSDKClient(self.options)
         
-    def has_image_content(self, message: UserMessage = None, user_input: str = None) -> bool:
-        """
-        Check if the user message contains image content.
-        Returns True if an image is detected, False otherwise.
-        
-        This checks both:
-        1. Actual image blocks in the message (if the SDK supports it)
-        2. Text indicators that the user is mentioning an image/receipt
-        """
-        # Check for actual image blocks in message content
-        if message:
-            if hasattr(message, 'content') and message.content:
-                # Check all blocks in the message content
-                for block in message.content:
-                    # Check if block has image-related attributes
-                    # The SDK might use different block types for images
-                    block_type = type(block).__name__.lower()
-                    if 'image' in block_type:
-                        return True
-                    # Also check if block has image data attributes
-                    if hasattr(block, 'source'):
-                        source = block.source
-                        if hasattr(source, 'type') and 'image' in str(source.type).lower():
-                            return True
-                    if hasattr(block, 'type') and 'image' in str(block.type).lower():
-                        return True
-        
-        # Check text input for image/receipt indicators
-        if user_input:
-            user_lower = user_input.lower()
-            image_keywords = [
-                'receipt', 'image', 'photo', 'picture', 'scan', 
-                'attached', 'upload', 'here is', 'here\'s', 'i have a receipt',
-                'submitting', 'submitted', 'sending', 'sent'
-            ]
-            if any(keyword in user_lower for keyword in image_keywords):
-                return True
-                
-        return False
-    
-    def create_dummy_receipt_data(self) -> dict:
-        """
-        Create dummy receipt data as a placeholder for actual image processing.
-        In a real implementation, this would be replaced with actual OCR/vision processing.
-        """
-        return {
-            "merchant": "Sample Coffee Shop",
-            "date": "2024-01-15",
-            "total_amount": 24.50,
-            "currency": "USD",
-            "items": [
-                {"description": "Coffee", "amount": 5.50},
-                {"description": "Sandwich", "amount": 12.00},
-                {"description": "Tax", "amount": 1.75},
-                {"description": "Tip", "amount": 5.25}
-            ],
-            "payment_method": "Credit Card",
-            "missing_info": [
-                "business_purpose",
-                "project_code"
-            ],
-            "confidence": "medium"  # Some fields may need verification
-        }
-    
-    async def process_message(self, user_input: str = None, user_message: UserMessage = None):
+    async def process_user_message(self, message_content: str, downloaded_file_names: list):
         """
         Process a user message, detect images, and handle the reimbursement workflow.
         """
-        # Detect if this is an image message
-        has_image = self.has_image_content(message=user_message, user_input=user_input)
+
+        receipt_detected = False
+        blurry = False
+
+        # Acknowledge the upload
+        if downloaded_file_names:
+            files_list = ", ".join(downloaded_file_names)
+
+            # Acknowledge the upload
+            if len(downloaded_file_names) > 0:
+                for file_name in downloaded_file_names:
+                    obj = extract_text(Path("downloads") / file_name)
+                    if obj["is_receipt"]:
+                        if obj["too_blurry"]:
+                            receipt_detected = True
+                            blurry = True
+                            return {"location": "dm", "content": "The receipt is too blurry to read. Please send a clearer image."}
+                        else:
+                            receipt_detected = True
+                            blurry = True
+                            return {"location": "dm", "content": f"Receipt detected! Here's the information: {obj}"}
+                    else:
+                        receipt_detected = True
+                        blurry = True
+                        return {"location": "dm", "content": "This is not a receipt."}
+            else:
+                return {"location": "dm", "content": "Thanks for sending the file! I encountered an error downloading it. 📁"}
         
-        # If image detected, create dummy receipt data and inform the agent
-        if has_image:
-            print("\n[System: Receipt image detected. Processing...]")
-            dummy_data = self.create_dummy_receipt_data()
-            
-            # Create a context message for the agent about the processed receipt
-            # This simulates what would come from OCR/vision processing
-            receipt_summary = f"""The user has submitted a receipt image. I've processed it and extracted the following information:
-
-RECEIPT DETAILS:
-- Merchant/Vendor: {dummy_data['merchant']}
-- Purchase Date: {dummy_data['date']}
-- Total Amount: ${dummy_data['total_amount']:.2f} {dummy_data['currency']}
-- Payment Method: {dummy_data['payment_method']}
-
-ITEMIZED EXPENSES:
-"""
-            for item in dummy_data['items']:
-                receipt_summary += f"  • {item['description']}: ${item['amount']:.2f}\n"
-            
-            receipt_summary += f"\n⚠️ MISSING INFORMATION REQUIRED: {', '.join(dummy_data['missing_info'])}\n"
-            receipt_summary += f"Processing Confidence: {dummy_data['confidence']}\n\n"
-            receipt_summary += "Please acknowledge receipt of this information, summarize what you found, and request the missing details from the user in a friendly, professional manner."
-            
-            # Send the receipt processing result to the agent
-            await self.agent.query(receipt_summary)
-            return
-            
-        # Query with user input if provided (normal text conversation)
-        if user_input:
-            await self.agent.query(user_input)
+        #await self.agent.query(receipt_summary)
     
     async def chat(self):
         """
