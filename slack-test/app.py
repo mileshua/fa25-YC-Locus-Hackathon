@@ -6,6 +6,7 @@ from slack_bolt import App
 from slack_bolt.adapter.socket_mode import SocketModeHandler
 import time
 import math
+from ocr import extract_text
 
 
 class SessionManager:
@@ -134,24 +135,21 @@ def handle_dms(event, say, logger, client):
         # Acknowledge the upload
         if downloaded_file_names:
             files_list = ", ".join(downloaded_file_names)
-            say(f"Thanks for sending the file(s)! I've downloaded: {files_list} 📁")
-            
-            # Send POST request to localhost:8000 with message and files
-            
-            # Send notification to reinbursements channel
-            try:
-                # Get user info to include in the notification
-                user_info = client.users_info(user=user)
-                user_name = user_info.get("user", {}).get("real_name", f"<@{user}>")
-                
-                # Send message to reinbursements channel
-                client.chat_postMessage(
-                    channel="C09SQKV6TPH",
-                    text=f"New reinbursement request received from {user_name}:\nLolipop: 67$\nLemonade: 10$\n"
-                )
+
+            # Acknowledge the upload
+            if len(downloaded_file_names) > 0:
+                for file_name in downloaded_file_names:
+                    obj = extract_text(Path("downloads") / file_name)
+                    if obj["is_receipt"]:
+                        if obj["too_blurry"]:
+                            say("The receipt is too blurry to read. Please send a clearer image.")
+                        else:
+                            say(f"Receipt detected! Here's the information: {obj}")
+                    else:
+                        say("This is not a receipt.")
+            else:
+                say("Thanks for sending the file! I encountered an error downloading it. 📁")
                 logger.info(f"Sent notification to #reinbursements channel for files: {files_list}")
-            except Exception as e:
-                logger.error(f"Error sending message to reinbursements channel: {str(e)}")
         else:
             say("Thanks for sending the file! I encountered an error downloading it. 📁")
     
