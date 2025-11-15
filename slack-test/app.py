@@ -1,27 +1,19 @@
 import os
 import requests
 import logging
+import asyncio
 from pathlib import Path
 from slack_bolt import App
+from slack_bolt.async_app import AsyncApp
 from slack_bolt.adapter.socket_mode import SocketModeHandler
+from slack_bolt.adapter.socket_mode.async_handler import AsyncSocketModeHandler
 import time
 import math
 from ocr import extract_text
-
-
-class SessionManager:
-    def create_session(self, user_id, start_time):
-        pass
-    def delete_session(self, user_id):
-        pass
-    def get_sessions(self):
-        pass
-    def new_message(self, user_id, message_content, downloaded_file_names):
-        pass
+from session_manager import SessionManager
 
 client = SessionManager()
 
-API_URL = "http://localhost:8000/"
 # Configure logging to display in terminal
 logging.basicConfig(
     level=logging.INFO,
@@ -34,14 +26,14 @@ logging.basicConfig(
 # see: https://slack.dev/bolt-python/tutorial/getting-started 
 
 # Initializes your app with your bot token
-app = App(token=os.environ.get("SLACK_BOT_TOKEN"))
+app = AsyncApp(token=os.environ.get("SLACK_BOT_TOKEN"))
 app.sessions = {}
 
 # Respond to ping messages
 @app.message("ping")
-def handle_ping_message(message, say):
+async def handle_ping_message(message, say):
     """Respond to 'ping' messages"""
-    say("Pong")
+    await say("Pong")
 
 
 def download_files(user_id, files, client, logger):
@@ -97,20 +89,25 @@ def download_files(user_id, files, client, logger):
     return downloaded_files
 
 
-def handle_session_content(user_id, message_content, downloaded_file_names, logger):
+async def handle_session_content(user_id, message_content, downloaded_file_names, logger):
     sessions = client.get_sessions()
+    print("sessions: " + str(sessions))
     session = sessions.get(user_id)
     if not session or session.get("start_time", math.inf) - time.perf_counter() > 300: # 5 minutes
+        print("no session found")
         if session:
             client.delete_session(user_id)
         client.create_session(user_id, time.perf_counter())
+    else:
+        print("session found")
+        print("session: " + str(session))
 
-    client.new_message(user_id, message_content, downloaded_file_names)
+    return await client.new_dm_message(user_id, message_content, downloaded_file_names)
     
 
 
 @app.event("message")
-def handle_dms(event, say, logger, client):
+async def handle_dms(event, say, logger, client):
     subtype = event.get("subtype")
     channel_type = event.get("channel_type")
 
@@ -142,22 +139,26 @@ def handle_dms(event, say, logger, client):
                     obj = extract_text(Path("downloads") / file_name)
                     if obj["is_receipt"]:
                         if obj["too_blurry"]:
-                            say("The receipt is too blurry to read. Please send a clearer image.")
+                            await say("The receipt is too blurry to read. Please send a clearer image.")
                         else:
-                            say(f"Receipt detected! Here's the information: {obj}")
+                            await say(f"Receipt detected! Here's the information: {obj}")
                     else:
-                        say("This is not a receipt.")
+                        await say("This is not a receipt.")
             else:
-                say("Thanks for sending the file! I encountered an error downloading it. 📁")
+                await say("Thanks for sending the file! I encountered an error downloading it. 📁")
                 logger.info(f"Sent notification to #reinbursements channel for files: {files_list}")
         else:
-            say("Thanks for sending the file! I encountered an error downloading it. 📁")
+            await say("Thanks for sending the file! I encountered an error downloading it. 📁")
     
-    response = handle_session_content(user_id, message_text, downloaded_file_names, logger)
+    response = await handle_session_content(user_id, message_text, downloaded_file_names, logger)
     if response and response.get("location") == "dm":
-        say(response.get("content"))
+        await say(response.get("content"))
 
 
 # Start your app
+async def main():
+    handler = AsyncSocketModeHandler(app, os.environ["SLACK_APP_TOKEN"])
+    await handler.start_async()
+
 if __name__ == "__main__":
-    SocketModeHandler(app, os.environ["SLACK_APP_TOKEN"]).start()
+    asyncio.run(main())

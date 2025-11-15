@@ -1,6 +1,6 @@
 import sys
 from pathlib import Path
-from datetime import datetime
+import time
 from typing import Dict, Optional
 
 
@@ -15,7 +15,7 @@ class SessionManager:
         # Format: {session_id: {"id": str, "created_at": datetime, "manager": ReimbursementManager}}
         self.sessions: Dict[str, dict] = {}
     
-    def create_session(self, user_id: str, start_time: Optional[datetime] = None) -> dict:
+    def create_session(self, user_id: str, start_time: int) -> dict:
         """
         Create a new session with a reimbursement manager.
         
@@ -36,7 +36,7 @@ class SessionManager:
             raise ValueError(f"Session with ID '{session_id}' already exists")
         
         # Use provided start_time or current time
-        created_at = start_time if start_time is not None else datetime.now()
+        created_at = start_time if start_time is not None else time.perf_counter()
         
         # Create a new ReimbursementManager instance for this session
         manager = None
@@ -50,7 +50,7 @@ class SessionManager:
         
         return {
             "session_id": session_id,
-            "created_at": created_at.isoformat()
+            "created_at": start_time
         }
     
     def delete_session(self, user_id: str) -> dict:
@@ -84,17 +84,14 @@ class SessionManager:
         Returns:
             dict with list of sessions containing session_id and created_at
         """
-        return {
-            "sessions": [
-                {
-                    "session_id": session["id"],
-                    "created_at": session["created_at"].isoformat()
-                }
-                for session in self.sessions.values()
-            ]
-        }
+        return {id : {"start_time": self.sessions[id]["created_at"]} for id in self.sessions.keys()}
     
-    async def new_message(self, user_id: str, message: str) -> dict:
+<<<<<<< HEAD
+    async def new_message(self, user_id: str, message_content: str, downloaded_file_names) -> dict:
+=======
+    def new_dm_message(self, user_id: str, message_content: str, downloaded_file_names) -> dict:
+>>>>>>> dee0cf5c789ca4ea79587c071823b4fd7943045a
+        return {"location": "dm", "content": "test :)"}
         """
         Send a message to a reimbursement manager in a specific session.
         
