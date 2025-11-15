@@ -11,6 +11,7 @@ from claude_agent_sdk import (
     ResultMessage,
     UserMessage
 )
+import json
 from pathlib import Path
 
 from pydantic.type_adapter import R
@@ -144,3 +145,27 @@ class ReimbursementManager:
         """
         
         return prompt
+
+    async def read_response(self, message_content: str):
+        new_message = self.conversation_history + "\n" + f"""Here is feedback from the reinbursements channel: {message_content} Was the reinbursement approved?
+        Reply in EXACTLY this format, with no extra characters before or after:""" + """{
+            "relevant": <boolean>
+            "approved": <boolean>
+            "message": <string>
+        }
+        If the message does not indicate whether the reinbursement was approved or not, set "relavant" to false.
+        Message should be a short user facing message that can be sent to the user.
+        Do not write anything other than the json object. Do not put this in a separate code block, simply put it in plain text.
+        """
+        async with self.agent:
+            await self.agent.query(new_message)
+            async for message in self.agent.receive_response():
+                if isinstance(message, AssistantMessage):
+                    for block in message.content:
+                        if isinstance(block, TextBlock):
+                            print(block.text)
+                            response = json.loads(block.text.strip("`json"))
+                            return response
+        return {"relavant": False, "approved": False, "message": "No response from the reinbursements channel."}
+
+                            

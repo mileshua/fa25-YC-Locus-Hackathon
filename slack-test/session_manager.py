@@ -92,3 +92,8 @@ class SessionManager:
         print("manger: ", manager)
         all_info_gathered, response = await manager.process_user_message(message_content, downloaded_file_names)
         return response
+
+    async def new_thread_message(self, user_id: str, message_content: str) -> dict:
+        manager = self.sessions[user_id]["manager"]
+        response = await manager.read_response(message_content)
+        return response

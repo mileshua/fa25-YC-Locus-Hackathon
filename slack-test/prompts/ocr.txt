@@ -3,7 +3,7 @@ If it is, extract information about the price of each item and the total price.
 - Make sure the name is readable and interpretable. Sometimes the receipt name is not clear, so you should write a simple descriptive, readable name.
 - Make sure the price is in dollars.
 - Make sure the total is in dollars.
-If it is a receipt but it is too blurry to read, DO NOT TRY TO GUESS THE VALUES. Say that it is a receipt, but add a note that it is too blurry to read.
+If it is a receipt but it is too blurry to read, DO NOT TRY TO GUESS THE VALUES. If anything is in question, do not try to guess it. Say that it is a receipt, but add a note that it is too blurry to read.
 If it is not, say that it is not a receipt.
 
 The format of your response should be in a json object with no reasoning or clarification. It should not use a code block, it should just be in plain text.
@@ -18,6 +18,9 @@ It should be in the following format:
             "price": <Item price> (float, in dollars)
         }
     ],
+    "date": <date> or "Not Found",
+    "location": <location> or "Not Found",
+    "store_name": <name> or "Not Found",
     "total": <Total price> (float, in dollars)
 }
 

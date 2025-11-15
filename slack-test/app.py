@@ -27,7 +27,8 @@ logging.basicConfig(
 
 # Initializes your app with your bot token
 app = AsyncApp(token=os.environ.get("SLACK_BOT_TOKEN"))
-app.sessions = {}
+app.watched_messages = {"1763247249.037409": "D09TJQ81D3K"}
+
 
 # Respond to ping messages
 @app.message("ping")
@@ -96,23 +97,46 @@ async def handle_session_content(user_id, message_content, downloaded_file_names
     sessions = manager.get_sessions()
     print("sessions: " + str(sessions))
     session = sessions.get(user_id)
-    if not session or session.get("start_time", math.inf) - time.perf_counter() > 300: # 5 minutes
-        print("no session found")
-        if session:
-            manager.delete_session(user_id)
+    if not session : # 5 minutes
         manager.create_session(user_id, time.perf_counter())
     else:
         print("session found")
         print("session: " + str(session))
 
     return await manager.new_dm_message(user_id, message_content, downloaded_file_names)
-    
+
+
+async def handle_others(event, say, logger, client):
+    # Check if the message is in a thread, and the parent message is in watched_messages
+    thread_ts = event.get("thread_ts")
+    if thread_ts and thread_ts in app.watched_messages:
+        sessions = manager.get_sessions()
+        print(sessions)
+        user_id = app.watched_messages[thread_ts]
+        session = sessions.get(user_id)
+        if not session:
+            print("Deleting watched message")
+            del app.watched_messages[thread_ts]
+            return
+
+        message_text = event.get("text", "")
+        response = await manager.new_thread_message(user_id, message_text)
+        if response["relevant"]:
+            await client.chat_postMessage(
+                channel=user_id,
+                text=response["message"],
+            )
+            manager.de
+            del app.watched_messages[thread_ts]
+    else:
+        print("Message not part of any watched thread")
 
 
 @app.event("message")
 async def handle_dms(event, say, logger, client):
     channel_type = event.get("channel_type")
     if channel_type != "im":
+        await handle_others(event, say, logger, client)
         return
     
     # Set thinking status
@@ -150,22 +174,27 @@ async def handle_dms(event, say, logger, client):
     try:
         if isinstance(responses, list):
             for response in responses:
+                content = response.get("content").replace("**", "*")
                 if response and response.get("location") == "dm":
-                    await say(response.get("content"))
+                    await say(content)
                 elif response and response.get("location") == "request":
-                    await client.chat_postMessage(
+                    message = await client.chat_postMessage(
                         channel="C09T45YDXAA",
-                        text=response.get("content"),
+                        text=content,
                     )
+                    app.watched_messages[message["ts"]] = user_id
         else:
             response = responses
+            content = response.get("content").replace("**", "*")
             if response and response.get("location") == "dm":
-                await say(response.get("content"))
+                await say(content)
             elif response and response.get("location") == "request":
-                await client.chat_postMessage(
+                message = await client.chat_postMessage(
                     channel="C09T45YDXAA",
-                    text=response.get("content"),
+                    text=content,
                 )
+                app.watched_messages[message["ts"]] = user_id
+
     except Exception as e:
         logger.warning(f"Failed to send response: {str(e)}")
     
