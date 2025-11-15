@@ -108,7 +108,7 @@ class ReimbursementManager:
                                 if isinstance(block, TextBlock):
                                     self.more_info = block.text
                                     self.conversation_history += ("\n" + self.more_info)
-                                    if self.more_info == "done":
+                                    if "done" in self.more_info.lower():
                                         self.all_info_collected = True
                                         return [{"location" : "request", "content" : "Yo wsg chat :)"},
                                             {"location" : "dm", "content" : "Perfect! All necessary info has been collected! I'll get back to you once there's an update on the status of your request :)"}]
