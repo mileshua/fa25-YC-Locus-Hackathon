@@ -42,6 +42,8 @@ class ReimbursementManager:
         self.options.system_prompt = system_prompt
         self.agent = ClaudeSDKClient(self.options)
 
+        self.valid_receipt = False
+
     def extract_recipt_data(self, downloaded_file_names: list):
         # Acknowledge the upload
         valid = False
@@ -63,45 +65,13 @@ class ReimbursementManager:
         """
         Process a user message, detect images, and handle the reimbursement workflow.
         """
-        res = None
         
-        try:
-            async with self.agent:
-                await self.agent.query("Do you still need a receipt image? Respond with 'yes' or 'no'.")
-                
-                # Collect all messages first to ensure stream is fully consumed
-                messages = []
-                try:
-                    async for message in self.agent.receive_response():
-                        messages.append(message)
-                except StopAsyncIteration:
-                    # Iterator exhausted, this is expected
-                    pass
-                except Exception as e:
-                    print(f"Error receiving response: {e}")
-                
-                # Process collected messages
-                for message in messages:
-                    if isinstance(message, AssistantMessage):
-                        for block in message.content:
-                            if isinstance(block, TextBlock):
-                                res = block.text
-                                # Only need the first text block
-                                break
-                        if res:
-                            break
-        finally:
-            # Give a small delay to ensure cleanup completes
-            await asyncio.sleep(0.05)
-
-        # Default to "no" if no response was received
-        if res is None:
-            res = "no"
-        
-        if res.lower().strip() == "yes":
+        if self.valid_receipt == False:
             if downloaded_file_names:
-                valid, message = self.extract_recipt_data(downloaded_file_names)
-                if valid:
+                self.valid_receipt, message = self.extract_recipt_data(downloaded_file_names)
+                async with self.agent:
+                    await self.agent.query(f"Receipt is valid: {self.valid_receipt}. " + message)
+                if self.valid_receipt:
                     return {"location": "dm", "content": message}
                 else:
                     return {"location": "dm", "content": message}
