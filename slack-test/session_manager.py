@@ -86,7 +86,7 @@ class SessionManager:
         """
         return {id : {"start_time": self.sessions[id]["created_at"]} for id in self.sessions.keys()}
     
-    def new_message(self, user_id: str, message_content: str, downloaded_file_names) -> dict:
+    def new_dm_message(self, user_id: str, message_content: str, downloaded_file_names) -> dict:
         return {"location": "dm", "content": "test :)"}
         """
         Send a message to a reimbursement manager in a specific session.

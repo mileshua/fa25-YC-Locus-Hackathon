@@ -99,7 +99,7 @@ def handle_session_content(user_id, message_content, downloaded_file_names, logg
         print("session found")
         print("session: " + str(session))
 
-    return client.new_message(user_id, message_content, downloaded_file_names)
+    return client.new_dm_message(user_id, message_content, downloaded_file_names)
     
 
 
@@ -148,6 +148,7 @@ def handle_dms(event, say, logger, client):
             say("Thanks for sending the file! I encountered an error downloading it. 📁")
     
     response = handle_session_content(user_id, message_text, downloaded_file_names, logger)
+
     if response and response.get("location") == "dm":
         say(response.get("content"))
 
