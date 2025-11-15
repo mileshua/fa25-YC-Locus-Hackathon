@@ -45,5 +45,6 @@ def extract_text(file_path):
         ],
         max_tokens=4096
     )
+    image.close()
     print(resp.content[0].text)
     return json.loads(resp.content[0].text)

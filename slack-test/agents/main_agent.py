@@ -1,5 +1,6 @@
 import asyncio
 import os
+import warnings
 from dotenv import load_dotenv
 from claude_agent_sdk import (
     ClaudeAgentOptions, 
@@ -11,6 +12,10 @@ from claude_agent_sdk import (
 )
 from pathlib import Path
 from agents.ocr import extract_text
+
+# Suppress ResourceWarnings from anyio streams in claude-agent-sdk
+# These are internal to the SDK and are cleaned up during garbage collection
+warnings.filterwarnings("ignore", category=ResourceWarning, module="anyio")
 
 # Load environment variables from .env file
 load_dotenv()
@@ -30,45 +35,85 @@ class ReimbursementManager:
         self.options.frequency_penalty = 0
         
         # Set system prompt for the reimbursement manager role
-        system_prompt = open("prompts/user_interactions.txt", "r").read()
+        prompt_path = Path("prompts/user_interactions.txt")
+        with prompt_path.open("r", encoding="utf-8") as f:
+            system_prompt = f.read()
 
-        self.options.system = system_prompt
+        self.options.system_prompt = system_prompt
         self.agent = ClaudeSDKClient(self.options)
+
+        self.conversation_history = ""
+
+        self.valid_receipt = False
+        self.all_info_collected = False
+
+    def extract_recipt_data(self, downloaded_file_names: list):
+        # Acknowledge the upload
+        valid = False
+        if len(downloaded_file_names) > 0:
+            for file_name in downloaded_file_names:
+                obj = extract_text(Path("downloads") / file_name)
+                if obj["is_receipt"]:
+                    if obj["too_blurry"]:
+                        return valid, "The receipt is too blurry to read. Please send a clearer image."
+                    else:
+                        valid = True
+                        return valid, f"Receipt detected! Here's the information: {obj}"
+                else:
+                    return valid, "This is not a receipt."
+        else:
+            return valid, "Thanks for sending the file! I encountered an error downloading it. 📁"
         
     async def process_user_message(self, message_content: str, downloaded_file_names: list):
         """
         Process a user message, detect images, and handle the reimbursement workflow.
         """
-
-        receipt_detected = False
-        blurry = False
-
-        # Acknowledge the upload
-        if downloaded_file_names:
-            files_list = ", ".join(downloaded_file_names)
-
-            # Acknowledge the upload
-            if len(downloaded_file_names) > 0:
-                for file_name in downloaded_file_names:
-                    obj = extract_text(Path("downloads") / file_name)
-                    if obj["is_receipt"]:
-                        if obj["too_blurry"]:
-                            receipt_detected = True
-                            blurry = True
-                            return {"location": "dm", "content": "The receipt is too blurry to read. Please send a clearer image."}
-                        else:
-                            receipt_detected = True
-                            blurry = True
-                            return {"location": "dm", "content": f"Receipt detected! Here's the information: {obj}"}
-                    else:
-                        receipt_detected = True
-                        blurry = True
-                        return {"location": "dm", "content": "This is not a receipt."}
-            else:
-                return {"location": "dm", "content": "Thanks for sending the file! I encountered an error downloading it. 📁"}
-        else:
-            return {"location": "dm", "content": "No files uploaded. Please upload a receipt image."}
         
+        if self.valid_receipt == False:
+            if downloaded_file_names:
+                self.valid_receipt, message = self.extract_recipt_data(downloaded_file_names)
+                async with self.agent:
+                    prompt = f"Receipt is valid: {self.valid_receipt}." + message
+                    if self.valid_receipt:
+                        prompt += "Here is the receipt info. Remember this and remember that a valid receipt has been provided. Move onto Phase 2 next. Also infer any context and information possible from the provided receipt info:  " + message
+                    await self.agent.query(self.conversation_history + prompt)
+                    self.conversation_history += ("\n" + prompt)
+                if self.valid_receipt:
+                    async with self.agent:
+                        await self.agent.query(self.conversation_history + ("\n" +"A valid receipt has been provided. Now ask the user about any more info you need that isn't on the receipt. Do not regurgitate receipt details unless you are asked to."))
+                        self.conversation_history += ("\n" +"A valid receipt has been provided. Now ask the user about any more info you need that isn't on the receipt. Do not regurgitate receipt details unless you are asked to.")
+                        async for message in self.agent.receive_response():
+                            if isinstance(message, AssistantMessage):
+                                for block in message.content:
+                                    if isinstance(block, TextBlock):
+                                        self.more_info = block.text
+                                        self.conversation_history += ("\n" + self.more_info)
+                                        return {"location": "dm", "content": self.more_info}
+                else:
+                    return {"location": "dm", "content": message}
+            else:
+                return {"location": "dm", "content": "No files uploaded. Please upload a receipt image."}
+        else:
+            if self.all_info_collected:
+                return {"location": "dm", "content": "All necessary information collected! I'll let you know if anything else is needed and when the request is completed!"}
+            else:
+                #return {"location": "dm", "content": "Still need more information. Please provide the following information: " + self.missing_info}
+                async with self.agent:
+                    all_info_message = " If all necessary information has been found, simply say 'done'"
+                    await self.agent.query(self.conversation_history + message_content + all_info_message)
+                    self.conversation_history += ("\n" + message_content + all_info_message)
+                    async for message in self.agent.receive_response():
+                        if isinstance(message, AssistantMessage):
+                            for block in message.content:
+                                if isinstance(block, TextBlock):
+                                    self.more_info = block.text
+                                    self.conversation_history += ("\n" + self.more_info)
+                                    if self.more_info == "done":
+                                        self.all_info_collected = True
+                                        return [{"location" : "request", "content" : "Yo wsg chat :)"},
+                                            {"location" : "dm", "content" : "Perfect! All necessary info has been collected! I'll get back to you once there's an update on the status of your request :)"}]
+                                    return {"location": "dm", "content": self.more_info}
+
         #await self.agent.query(receipt_summary)
     
     async def chat(self):

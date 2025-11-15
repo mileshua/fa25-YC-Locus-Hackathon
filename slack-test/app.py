@@ -4,6 +4,7 @@ import logging
 import asyncio
 from pathlib import Path
 from slack_bolt import App
+import json
 from slack_bolt.async_app import AsyncApp
 from slack_bolt.adapter.socket_mode import SocketModeHandler
 from slack_bolt.adapter.socket_mode.async_handler import AsyncSocketModeHandler
@@ -15,7 +16,7 @@ manager = SessionManager()
 
 # Configure logging to display in terminal
 logging.basicConfig(
-    level=logging.INFO,
+    level=logging.WARNING,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     datefmt='%Y-%m-%d %H:%M:%S'
 )
@@ -114,6 +115,25 @@ async def handle_dms(event, say, logger, client):
     if channel_type != "im":
         return
     
+    # Set thinking status
+    channel = event.get("channel")
+    thread_ts = event.get("thread_ts") or event.get("ts")  # Use message timestamp as thread_ts for DMs
+    try:
+        await client.assistant_threads_setStatus(
+            channel_id=channel,
+            thread_ts=thread_ts,
+            status="thinking...",
+            loading_messages=[
+                "Teaching the hamsters to type faster…",
+                "Untangling the internet cables…",
+                "Consulting the office goldfish…",
+                "Polishing up the response just for you…",
+                "Convincing the AI to stop overthinking…",
+            ],
+        )
+    except Exception as e:
+        logger.warning(f"Failed to set thinking status: {str(e)}")
+    
     # Only handle file_share subtype (file uploads)
     downloaded_file_names = []
     user_id = event.get("user")
@@ -126,10 +146,35 @@ async def handle_dms(event, say, logger, client):
         print("downloaded_file_names: " + str(downloaded_file_names))
 
     message_text = event.get("text", "")
-    response = await handle_session_content(user_id, message_text, downloaded_file_names, logger)
-    print(response)
-    if response and response.get("location") == "dm":
-        await say(response.get("content"))
+    responses = await handle_session_content(user_id, message_text, downloaded_file_names, logger)
+    if isinstance(responses, list):
+        for response in responses:
+            if response and response.get("location") == "dm":
+                await say(response.get("content"))
+            elif response and response.get("location") == "request":
+                await client.chat_postMessage(
+                    channel="C09T45YDXAA",
+                    text=response.get("content"),
+                )
+    else:
+        response = responses
+        if response and response.get("location") == "dm":
+            await say(response.get("content"))
+        elif response and response.get("location") == "request":
+            await client.chat_postMessage(
+                channel="C09T45YDXAA",
+                text=response.get("content"),
+            )
+    
+    # Clear thinking status after processing is complete
+    try:
+        await client.assistant_threads_setStatus(
+            channel_id=channel,
+            thread_ts=thread_ts,
+            status="",
+        )
+    except Exception as e:
+        logger.warning(f"Failed to clear thinking status: {str(e)}")
 
 
 # Start your app
