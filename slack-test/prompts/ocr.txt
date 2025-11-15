@@ -1,0 +1,23 @@
+I want you to check whether this image is a receipt or invoice.
+If it is, extract information about the price of each item and the total price.
+If it is not, say that it is not a receipt.
+
+The format of your response should be in a json object with no reasoning or clarification. It should be in the following format:
+
+{
+    "is_receipt": true,
+    "items": [
+        {
+            "name": "Item name",
+            "price": <Item price> (float, in dollars)
+        }
+    ],
+    "total": <Total price> (float, in dollars)
+}
+
+If it is not a receipt, return the following json object:
+{
+    "is_receipt": false,
+}
+
+Do not write anything other than the json object.
