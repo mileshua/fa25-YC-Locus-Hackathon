@@ -28,7 +28,7 @@ app.sessions = {}
 
 # Respond to ping messages
 @app.message("ping")
-def handle_ping_message(message, say):
+async def handle_ping_message(message, say):
     """Respond to 'ping' messages"""
     say("Pong")
 
@@ -86,7 +86,7 @@ def download_files(user_id, files, client, logger):
     return downloaded_files
 
 
-def handle_session_content(user_id, message_content, downloaded_file_names, logger):
+async def handle_session_content(user_id, message_content, downloaded_file_names, logger):
     sessions = client.get_sessions()
     print("sessions: " + str(sessions))
     session = sessions.get(user_id)
@@ -99,12 +99,12 @@ def handle_session_content(user_id, message_content, downloaded_file_names, logg
         print("session found")
         print("session: " + str(session))
 
-    return client.new_message(user_id, message_content, downloaded_file_names)
+    return await client.new_message(user_id, message_content, downloaded_file_names)
     
 
 
 @app.event("message")
-def handle_dms(event, say, logger, client):
+async def handle_dms(event, say, logger, client):
     subtype = event.get("subtype")
     channel_type = event.get("channel_type")
 
@@ -147,7 +147,7 @@ def handle_dms(event, say, logger, client):
         else:
             say("Thanks for sending the file! I encountered an error downloading it. 📁")
     
-    response = handle_session_content(user_id, message_text, downloaded_file_names, logger)
+    response = await handle_session_content(user_id, message_text, downloaded_file_names, logger)
     if response and response.get("location") == "dm":
         say(response.get("content"))
 
