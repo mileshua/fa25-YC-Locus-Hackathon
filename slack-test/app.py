@@ -1,5 +1,5 @@
 import os
-import requests
+import aiohttp
 import logging
 import asyncio
 from pathlib import Path
@@ -11,7 +11,7 @@ import time
 import math
 from session_manager import SessionManager
 
-client = SessionManager()
+manager = SessionManager()
 
 # Configure logging to display in terminal
 logging.basicConfig(
@@ -35,11 +35,12 @@ async def handle_ping_message(message, say):
     await say("Pong")
 
 
-def download_files(user_id, files, client, logger):
+async def download_files(user_id, files, client, logger):
     """
-    Download files from Slack to local downloads directory.
+    Download files from Slack to local downloads directory using aiohttp.
     
     Args:
+        user_id: User ID to prefix file names
         files: List of file info dictionaries from Slack event
         client: Slack WebClient instance
         logger: Logger instance
@@ -53,55 +54,57 @@ def download_files(user_id, files, client, logger):
 
     # Download each file
     downloaded_files = []
-    for file_info in files:
-        file_id = file_info.get("id")
-        file_name = user_id + "_" + file_info.get("name", f"file_{file_id}")
-        
-        try:
-            # Get file info and download URL
-            file_response = client.files_info(file=file_id)
-            file_data = file_response["file"]
+    headers = {"Authorization": f"Bearer {os.environ.get('SLACK_BOT_TOKEN')}"}
+    
+    async with aiohttp.ClientSession() as session:
+        for file_info in files:
+            file_id = file_info.get("id")
+            file_name = user_id + "_" + file_info.get("name", f"file_{file_id}")
             
-            # Get the private download URL
-            url_private = file_data.get("url_private")
-            
-            if url_private:
-                # Download the file
-                headers = {"Authorization": f"Bearer {os.environ.get('SLACK_BOT_TOKEN')}"}
-                response = requests.get(url_private, headers=headers, stream=True)
-                response.raise_for_status()
+            try:
+                # Get file info and download URL
+                file_response = await client.files_info(file=file_id)
+                file_data = file_response["file"]
                 
-                # Save the file
-                file_path = downloads_dir / file_name
-                with open(file_path, "wb") as f:
-                    for chunk in response.iter_content(chunk_size=8192):
-                        f.write(chunk)
+                # Get the private download URL
+                url_private = file_data.get("url_private")
                 
-                downloaded_files.append(file_name)
-                logger.info(f"Downloaded file: {file_name} to {file_path}")
-            else:
-                logger.warning(f"No download URL found for file {file_id}")
-                
-        except Exception as e:
-            logger.error(f"Error downloading file {file_id}: {str(e)}")
+                if url_private:
+                    # Download the file asynchronously
+                    async with session.get(url_private, headers=headers) as response:
+                        response.raise_for_status()
+                        
+                        # Save the file
+                        file_path = downloads_dir / file_name
+                        with open(file_path, "wb") as f:
+                            async for chunk in response.content.iter_chunked(8192):
+                                f.write(chunk)
+                        
+                        downloaded_files.append(file_name)
+                        logger.info(f"Downloaded file: {file_name} to {file_path}")
+                else:
+                    logger.warning(f"No download URL found for file {file_id}")
+                    
+            except Exception as e:
+                logger.error(f"Error downloading file {file_id}: {str(e)}")
     
     return downloaded_files
 
 
 async def handle_session_content(user_id, message_content, downloaded_file_names, logger):
-    sessions = client.get_sessions()
+    sessions = manager.get_sessions()
     print("sessions: " + str(sessions))
     session = sessions.get(user_id)
     if not session or session.get("start_time", math.inf) - time.perf_counter() > 300: # 5 minutes
         print("no session found")
         if session:
-            client.delete_session(user_id)
-        client.create_session(user_id, time.perf_counter())
+            manager.delete_session(user_id)
+        manager.create_session(user_id, time.perf_counter())
     else:
         print("session found")
         print("session: " + str(session))
 
-    return await client.new_dm_message(user_id, message_content, downloaded_file_names)
+    return await manager.new_dm_message(user_id, message_content, downloaded_file_names)
     
 
 
@@ -119,12 +122,11 @@ async def handle_dms(event, say, logger, client):
     if subtype == "file_share":
         files = event.get("files", [])
         logger.info(f"Received DM file upload from {user_id}: {files}")
-        downloaded_file_names = download_files(user_id, files, client, logger)
+        downloaded_file_names = await download_files(user_id, files, client, logger)
+        print("downloaded_file_names: " + str(downloaded_file_names))
 
     message_text = event.get("text", "")
-    print("test1")
     response = await handle_session_content(user_id, message_text, downloaded_file_names, logger)
-    print("test2")
     print(response)
     if response and response.get("location") == "dm":
         await say(response.get("content"))
