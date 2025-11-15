@@ -99,14 +99,19 @@ class ReimbursementManager:
             else:
                 #return {"location": "dm", "content": "Still need more information. Please provide the following information: " + self.missing_info}
                 async with self.agent:
-                    await self.agent.query(self.conversation_history + message_content)
-                    self.conversation_history += ("\n" + message_content)
+                    all_info_message = " If all necessary information has been found, simply say 'done'"
+                    await self.agent.query(self.conversation_history + message_content + all_info_message)
+                    self.conversation_history += ("\n" + message_content + all_info_message)
                     async for message in self.agent.receive_response():
                         if isinstance(message, AssistantMessage):
                             for block in message.content:
                                 if isinstance(block, TextBlock):
                                     self.more_info = block.text
                                     self.conversation_history += ("\n" + self.more_info)
+                                    if self.more_info == "done":
+                                        self.all_info_collected = True
+                                        return [{"location" : "request", "content" : "Yo wsg chat :)"},
+                                            {"location" : "dm", "content" : "Perfect! All necessary info has been collected! I'll get back to you once there's an update on the status of your request :)"}]
                                     return {"location": "dm", "content": self.more_info}
 
         #await self.agent.query(receipt_summary)
