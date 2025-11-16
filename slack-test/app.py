@@ -122,11 +122,21 @@ async def handle_others(event, say, logger, client):
         message_text = event.get("text", "")
         response = await manager.new_thread_message(user_id, message_text)
         if response["relevant"]:
+            if response["approved"]:
+                await client.chat_postMessage(
+                    channel=thread_ts,
+                    text="Yay! I'll let the user know that their request has been approved!",
+                )
+            else:
+                await client.chat_postMessage(
+                    channel=thread_ts,
+                    text="Unfortunate. I will relay this information to the user.",
+                )
             await client.chat_postMessage(
                 channel=user_id,
                 text=response["message"],
             )
-            manager.de
+            manager.delete_session(user_id)
             del app.watched_messages[thread_ts]
     else:
         print("Message not part of any watched thread")

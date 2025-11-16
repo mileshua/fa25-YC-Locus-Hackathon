@@ -1,6 +1,6 @@
 {
   "display_information": {
-    "name": "Reinbursement-Reader"
+    "name": "Nexus User Agent"
   },
   "features": {
     "app_home": {
@@ -9,7 +9,7 @@
       "messages_tab_read_only_enabled": false
     },
     "bot_user": {
-      "display_name": "Reinbursement-Reader",
+      "display_name": "Nexus User Agent",
       "always_online": true
     },
     "assistant": {
